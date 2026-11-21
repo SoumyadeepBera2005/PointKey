@@ -72,6 +72,37 @@ async function deliverEmailOtp(email, code) {
     </html>
   `;
 
+  // 1. Resend REST API (Runs over Port 443 HTTPS - 100% works on Render Free Tier!)
+  if (process.env.RESEND_API_KEY) {
+    try {
+      const axios = require('axios');
+      const sender = process.env.RESEND_FROM || 'PointKey <onboarding@resend.dev>';
+      await axios.post(
+        'https://api.resend.com/emails',
+        {
+          from: sender,
+          to: [email],
+          subject,
+          text: textMessage,
+          html: htmlMessage,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.RESEND_API_KEY.trim()}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 10000,
+        }
+      );
+      console.log(`[EMAIL OTP] Successfully dispatched OTP email to ${maskEmail(email)} via Resend API`);
+      return;
+    } catch (e) {
+      console.error(`[EMAIL OTP] Resend API send failed:`, e.response?.data || e.message);
+      throw new Error(`Resend email failed: ${e.response?.data?.message || e.message}`);
+    }
+  }
+
+  // 2. SMTP fallback (Gmail or custom SMTP)
   if (process.env.EMAIL_SMTP_USER && process.env.EMAIL_SMTP_APP_PASSWORD) {
     try {
       const nodemailer = require('nodemailer');

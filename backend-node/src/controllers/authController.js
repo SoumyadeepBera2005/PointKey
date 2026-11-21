@@ -76,7 +76,7 @@ async function deliverEmailOtp(email, code) {
   if (process.env.BREVO_API_KEY) {
     try {
       const axios = require('axios');
-      const senderEmail = process.env.BREVO_SENDER_EMAIL || process.env.EMAIL_SMTP_USER || 'pointkey.official@gmail.com';
+      const senderEmail = process.env.BREVO_SENDER_EMAIL || 'soumyadeepbera911@gmail.com';
       await axios.post(
         'https://api.brevo.com/v3/smtp/email',
         {

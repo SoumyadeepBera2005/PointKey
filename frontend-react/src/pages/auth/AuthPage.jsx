@@ -42,7 +42,7 @@ export default function AuthPage() {
   const [devOtp, setDevOtp] = useState('');
 
   // OTP countdown & notification states
-  const [otpSecondsLeft, setOtpSecondsLeft] = useState(300); // 5 minutes countdown (300s)
+  const [otpSecondsLeft, setOtpSecondsLeft] = useState(60); // 1 minute countdown (60s)
   const [otpSuccessMsg, setOtpSuccessMsg] = useState('');
 
   // Password reset flow states
@@ -156,7 +156,7 @@ export default function AuthPage() {
       const data = await login(formData.email.trim(), formData.phone.trim(), formData.password, roleUpper);
       setMaskedEmail(data.email || formData.email.trim());
       if (data.dev_otp) setDevOtp(data.dev_otp);
-      setOtpSecondsLeft(300);
+      setOtpSecondsLeft(60);
       setOtpSuccessMsg('');
       setMode('otp');
     } catch (err) {
@@ -203,7 +203,7 @@ export default function AuthPage() {
     try {
       const data = await login(formData.email.trim(), formData.phone.trim(), formData.password, roleUpper);
       if (data.dev_otp) setDevOtp(data.dev_otp);
-      setOtpSecondsLeft(300);
+      setOtpSecondsLeft(60);
       setOtpSuccessMsg('A new verification code has been sent to your email.');
     } catch (err) {
       setFormError(err.response?.data?.message || 'Failed to resend OTP.');
@@ -256,7 +256,7 @@ export default function AuthPage() {
     try {
       const { data } = await api.post('/auth/forgot-password', { email: formData.email.trim() });
       if (data.dev_otp) setResetDevOtp(data.dev_otp);
-      setOtpSecondsLeft(300);
+      setOtpSecondsLeft(60);
       setOtpSuccessMsg('');
       setMode('reset');
     } catch (err) {
@@ -274,7 +274,7 @@ export default function AuthPage() {
     try {
       const { data } = await api.post('/auth/forgot-password', { email: formData.email.trim() });
       if (data.dev_otp) setResetDevOtp(data.dev_otp);
-      setOtpSecondsLeft(300);
+      setOtpSecondsLeft(60);
       setOtpSuccessMsg('A fresh verification code has been sent to your email.');
     } catch (err) {
       setFormError(err.response?.data?.message || 'Failed to resend reset code.');

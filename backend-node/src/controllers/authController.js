@@ -3,7 +3,7 @@ const db = require('../config/db');
 const { signToken } = require('../middlewares/authMiddleware');
 const { cacheGet, cacheSet, cacheDel } = require('../config/redis');
 
-const OTP_TTL = 300; // 5 minutes
+const OTP_TTL = 60; // 1 minute
 
 // Normalise Indian mobile numbers to plain 10-digit form so login matches
 // regardless of how the user typed it (+91, spaces, leading 0).
@@ -30,7 +30,7 @@ function generateOtp() {
 // Secret OTP codes are NEVER logged in console or sent to client responses.
 async function deliverEmailOtp(email, code) {
   const subject = 'Your PointKey Verification Code';
-  const textMessage = `Your PointKey verification code is ${code}. It expires in 5 minutes. Do not share it with anyone.`;
+  const textMessage = `Your PointKey verification code is ${code}. It expires in 1 minute. Do not share it with anyone.`;
   const htmlMessage = `
     <!DOCTYPE html>
     <html>
@@ -61,7 +61,7 @@ async function deliverEmailOtp(email, code) {
           <div class="desc">Please enter the following 6-digit one-time password (OTP) to securely access your PointKey account:</div>
           <div class="otp-box">${code}</div>
           <div class="warning">🔒 Keep this code secret. Never share it with anyone.</div>
-          <p style="font-size: 12px; color: #5b5547; margin: 0;">This code is valid for <strong>5 minutes</strong>.</p>
+          <p style="font-size: 12px; color: #5b5547; margin: 0;">This code is valid for <strong>1 minute</strong>.</p>
         </div>
         <div class="footer">
           This is an automated verification email from PointKey.<br>

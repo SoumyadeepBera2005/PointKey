@@ -243,9 +243,8 @@ async function login(req, res, next) {
       otp_required: true,
       message: emailSent
         ? `OTP sent to ${maskEmail(user.email)}`
-        : `Email delivery not available. Verification code: ${code}`,
+        : `Email delivery failed. Please try again.`,
       email: maskEmail(user.email),
-      dev_otp: code,
     });
   } catch (e) { next(e); }
 }
@@ -285,7 +284,6 @@ async function forgotPassword(req, res, next) {
     if (!email) return res.status(400).json({ message: 'email is required' });
     const normalizedEmail = String(email).trim().toLowerCase();
 
-    let devOtp = null;
     const [[user]] = await db.query('SELECT id FROM users WHERE email = ? LIMIT 1', [normalizedEmail]);
     if (user) {
       const code = generateOtp();
@@ -295,11 +293,9 @@ async function forgotPassword(req, res, next) {
       } catch (e) {
         console.warn(`[AUTH] Forgot password email failed: ${e.message}`);
       }
-      devOtp = code;
     }
     return res.json({
       message: 'If an account exists for this email, an OTP has been sent to it',
-      dev_otp: devOtp,
     });
   } catch (e) { next(e); }
 }

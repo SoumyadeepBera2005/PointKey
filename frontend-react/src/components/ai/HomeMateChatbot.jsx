@@ -1038,22 +1038,26 @@ export default function HomeMateChatbot({ onOpenSearchFilters, properties = [] }
           background: #15382e;
         }
 
-        @media (max-width: 600px) {
+        @media (max-width: 768px) {
           .pointkey-homemate-wrap {
-            right: 16px;
-            bottom: 16px;
+            right: 14px;
+            bottom: calc(env(safe-area-inset-bottom, 0px) + 68px);
           }
           .homemate-window {
-            width: calc(100vw - 32px);
-            height: 520px;
-            bottom: 66px;
+            width: calc(100vw - 28px);
+            max-width: 420px;
+            height: min(520px, calc(100vh - 150px));
+            bottom: 60px;
+            right: 0;
+            border-radius: 20px;
           }
           .homemate-btn {
-            width: 52px;
-            height: 52px;
-            min-width: 52px;
+            width: 48px;
+            height: 48px;
+            min-width: 48px;
             padding: 0;
             border-radius: 50%;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
           }
           .homemate-btn .chat-label {
             display: none;

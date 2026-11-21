@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../../components/common/Navbar';
+import BottomNav from '../../components/common/BottomNav';
 import HomeMateChatbot from '../../components/ai/HomeMateChatbot';
 import { SAMPLE_PROPERTIES } from '../../data/sampleProperties';
 import api from '../../services/api';
@@ -1010,9 +1011,119 @@ export default function TenantHome() {
           transform: translateY(-1px);
         }
 
+        /* MOBILE PILLAR SWITCHER BAR */
+        .pk-mobile-pillar-bar {
+          display: none;
+        }
+
         @media (max-width: 860px) {
           .pk-sticky-cat-pills {
             display: none;
+          }
+          .pk-mobile-pillar-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+            background: #ffffff;
+            border-bottom: 1px solid #ebe1c9;
+            padding: 8px 10px;
+            gap: 6px;
+            position: sticky;
+            top: 60px;
+            z-index: 90;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+          }
+          .pk-mob-tab {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 8px 10px;
+            border-radius: 12px;
+            border: 1px solid #ebe1c9;
+            background: #faf7f0;
+            color: #4b5563;
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: all 0.15s ease;
+          }
+          .pk-mob-tab.active {
+            background: #1E3A8A;
+            color: #ffffff;
+            border-color: #1E3A8A;
+            box-shadow: 0 3px 10px rgba(30, 58, 138, 0.25);
+          }
+        }
+
+        @media (max-width: 768px) {
+          .pk-hero-root {
+            min-height: 440px !important;
+            padding: 76px 14px 40px !important;
+          }
+          .pk-hero-title {
+            font-size: clamp(24px, 6.8vw, 34px) !important;
+            line-height: 1.2 !important;
+            margin-bottom: 12px !important;
+          }
+          .pk-hero-subtitle {
+            font-size: 13.5px !important;
+            line-height: 1.5 !important;
+            margin-bottom: 20px !important;
+          }
+          .pk-searchbar-card {
+            padding: 6px 6px 6px 14px !important;
+            border-radius: 16px !important;
+            width: 100% !important;
+            gap: 8px !important;
+          }
+          .pk-search-input {
+            font-size: 16px !important;
+          }
+          .pk-search-submit {
+            padding: 10px 16px !important;
+            font-size: 13px !important;
+            border-radius: 12px !important;
+          }
+          .pk-cat-pills {
+            flex-wrap: nowrap !important;
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            scrollbar-width: none !important;
+            justify-content: flex-start !important;
+            padding: 4px 4px 8px !important;
+            margin-top: 16px !important;
+            width: 100% !important;
+          }
+          .pk-cat-pills::-webkit-scrollbar {
+            display: none !important;
+          }
+          .pk-pill-btn {
+            flex-shrink: 0 !important;
+            padding: 7px 14px !important;
+            font-size: 12.5px !important;
+          }
+          .pk-hero-locations {
+            flex-wrap: nowrap !important;
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            scrollbar-width: none !important;
+            justify-content: flex-start !important;
+            padding: 2px 4px !important;
+            gap: 6px !important;
+          }
+          .pk-hero-locations::-webkit-scrollbar {
+            display: none !important;
+          }
+          .pk-loc-link {
+            flex-shrink: 0 !important;
+            font-size: 11.5px !important;
+            padding: 3px 10px !important;
+          }
+          .pk-reel-controls {
+            bottom: 12px !important;
+            left: 14px !important;
           }
         }
 
@@ -1024,6 +1135,58 @@ export default function TenantHome() {
           .pk-sticky-submit-btn {
             padding: 8px 14px;
             font-size: 12.5px;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .pk-main-content {
+            padding: 20px 12px 100px !important;
+          }
+          .pk-section-head {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 12px !important;
+          }
+          .pk-section-title {
+            font-size: 22px !important;
+          }
+          .pk-cards-grid {
+            grid-template-columns: 1fr !important;
+            gap: 16px !important;
+          }
+          .pk-card-image-wrap {
+            height: 180px !important;
+          }
+          .pk-facility-grid {
+            grid-template-columns: 1fr !important;
+            gap: 14px !important;
+          }
+          .pk-facility-card {
+            padding: 16px !important;
+          }
+          .pk-budget-showcase-shell {
+            padding: 20px 16px !important;
+            border-radius: 18px !important;
+          }
+          .pk-budget-dashboard-grid {
+            grid-template-columns: 1fr !important;
+            gap: 16px !important;
+          }
+          .pk-budget-summary-box {
+            padding: 18px 16px !important;
+          }
+          .pk-budget-ledger-box {
+            padding: 18px 16px !important;
+          }
+          .pk-quick-add-form {
+            grid-template-columns: 1fr !important;
+          }
+          .pk-footer-grid {
+            grid-template-columns: 1fr !important;
+            gap: 28px !important;
+          }
+          .pk-footer-root {
+            padding: 36px 16px 100px !important;
           }
         }
 
@@ -2076,6 +2239,34 @@ export default function TenantHome() {
           </div>
         </div>
       </section>
+
+      {/* MOBILE PILLAR SWITCHER BAR (<860px) */}
+      <div className="pk-mobile-pillar-bar">
+        <button
+          type="button"
+          className={`pk-mob-tab ${activePillar === 'SearchKart' ? 'active' : ''}`}
+          onClick={() => setActivePillar('SearchKart')}
+        >
+          <span style={{ fontSize: '13px' }}>🔍</span>
+          <span>SearchKart</span>
+        </button>
+        <button
+          type="button"
+          className={`pk-mob-tab ${activePillar === 'FacilityKart' ? 'active' : ''}`}
+          onClick={() => setActivePillar('FacilityKart')}
+        >
+          <span style={{ fontSize: '13px' }}>🛠️</span>
+          <span>FacilityKart</span>
+        </button>
+        <button
+          type="button"
+          className={`pk-mob-tab ${activePillar === 'BudgetKart' ? 'active' : ''}`}
+          onClick={() => setActivePillar('BudgetKart')}
+        >
+          <span style={{ fontSize: '13px' }}>💰</span>
+          <span>BudgetKart</span>
+        </button>
+      </div>
 
       {/* MAIN CONTENT AREA */}
       <main className="pk-main-content">
@@ -3268,6 +3459,9 @@ export default function TenantHome() {
           <span>{toastMessage}</span>
         </div>
       )}
+
+      {/* MOBILE BOTTOM NAVIGATION DOCK */}
+      <BottomNav />
     </div>
   );
 }

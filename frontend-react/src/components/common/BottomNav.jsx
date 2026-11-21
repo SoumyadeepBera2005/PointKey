@@ -1,14 +1,31 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { Home, Search, MessageCircle, User, MapPin, ListChecks, CalendarClock, ShieldCheck, Users, LayoutDashboard } from 'lucide-react';
+import { Home, Search, MessageCircle, User, ListChecks, CalendarClock, ShieldCheck, Users, LayoutDashboard, LogIn } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 export default function BottomNav() {
   const { user } = useAuth();
   const { pathname } = useLocation();
-  if (!user) return null;
+
+  // Hide completely on splash, auth, role-selection & admin login
+  if (
+    pathname === '/auth' ||
+    pathname === '/admin/login' ||
+    pathname === '/onboarding' ||
+    pathname === '/splash' ||
+    pathname === '/role-selection'
+  ) {
+    return null;
+  }
 
   let items = [];
-  if (user.role === 'TENANT') {
+  if (!user) {
+    items = [
+      { to: '/tenant', label: 'Home', icon: Home },
+      { to: '/tenant/search', label: 'Search', icon: Search },
+      { to: '/tenant/chats', label: 'Support', icon: MessageCircle },
+      { to: '/auth', label: 'Log in', icon: LogIn },
+    ];
+  } else if (user.role === 'TENANT') {
     items = [
       { to: '/tenant', label: 'Home', icon: Home },
       { to: '/tenant/search', label: 'Search', icon: Search },
@@ -32,13 +49,19 @@ export default function BottomNav() {
   }
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-beige-border bg-cream/95 backdrop-blur-lg md:hidden">
-      <div className="mx-auto grid max-w-lg grid-cols-4 px-2 py-1.5">
+    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[#ebe1c9] bg-white/95 backdrop-blur-lg md:hidden pb-[calc(env(safe-area-inset-bottom,0px)+6px)] pt-1.5 shadow-[0_-4px_25px_rgba(0,0,0,0.08)]">
+      <div className="mx-auto grid max-w-lg grid-cols-4 px-2">
         {items.map(({ to, label, icon: Icon }) => {
           const active = pathname === to;
           return (
-            <NavLink key={to} to={to} className={`nav-link ${active ? 'active' : ''}`}>
-              <Icon size={20} strokeWidth={active ? 2.4 : 1.8} />
+            <NavLink
+              key={to}
+              to={to}
+              className={`nav-link flex flex-col items-center gap-1 py-1 text-[11px] font-semibold transition-all ${
+                active ? 'text-[#14532D] scale-105' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Icon size={20} strokeWidth={active ? 2.5 : 1.8} />
               <span>{label}</span>
             </NavLink>
           );

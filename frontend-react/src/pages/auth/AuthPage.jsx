@@ -795,6 +795,12 @@ export default function AuthPage() {
             align-items: flex-start;
             padding: 22px 18px calc(28px + env(safe-area-inset-bottom, 0px));
           }
+          .pk-in input, .pk-in select {
+            font-size: 16px; /* Prevents iOS Safari auto-zoom */
+          }
+          .pk-title {
+            font-size: 24px;
+          }
         }
       `}</style>
 

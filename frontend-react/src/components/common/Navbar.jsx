@@ -508,10 +508,124 @@ export default function Navbar({ onSelectLocation, onOpenServices, onOpenExpense
 
         @media(max-width: 860px) {
           .pk-nav-center {
-            display: none;
+            display: none !important;
           }
           .pointkey-navbar-root {
             padding: 0 16px;
+          }
+        }
+
+        @media(max-width: 640px) {
+          .pointkey-navbar-root {
+            height: 60px !important;
+            padding: 0 10px !important;
+          }
+          .pk-nav-left {
+            gap: 8px !important;
+          }
+          .pk-brand-title {
+            font-size: 18px !important;
+            letter-spacing: -0.5px !important;
+          }
+          .pk-logo-mark {
+            width: 30px !important;
+            height: 30px !important;
+            border-radius: 8px !important;
+          }
+          .pk-logo-mark::before {
+            width: 14px !important;
+            height: 14px !important;
+            left: 8px !important;
+            top: 7.5px !important;
+          }
+          .pk-logo-mark::after {
+            width: 4px !important;
+            height: 9px !important;
+            left: 13px !important;
+            top: 15px !important;
+          }
+          .pk-location-btn {
+            height: 34px !important;
+            padding: 0 8px !important;
+            font-size: 12px !important;
+            gap: 5px !important;
+            border-radius: 10px !important;
+          }
+          .pk-loc-btn-name {
+            max-width: 75px !important;
+            font-size: 11.5px !important;
+          }
+          .pk-nav-right {
+            gap: 6px !important;
+          }
+          .pk-nav-icon-btn, .pk-avatar-btn {
+            width: 34px !important;
+            height: 34px !important;
+            border-radius: 10px !important;
+          }
+          .pk-avatar-circle {
+            width: 26px !important;
+            height: 26px !important;
+            font-size: 11px !important;
+          }
+          .pk-badge-count {
+            min-width: 14px !important;
+            height: 14px !important;
+            font-size: 8px !important;
+            top: 2px !important;
+            right: 2px !important;
+          }
+          .pk-explore-btn {
+            display: none !important;
+          }
+
+          /* Floating mobile dropdown sheets so they NEVER clip or overflow horizontally */
+          .pk-location-dropdown,
+          .pk-popup-panel,
+          .pk-profile-menu {
+            position: fixed !important;
+            top: 64px !important;
+            left: 10px !important;
+            right: 10px !important;
+            width: auto !important;
+            max-width: none !important;
+            max-height: calc(85vh - 70px) !important;
+            overflow-y: auto !important;
+            border-radius: 18px !important;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3) !important;
+          }
+
+          .pk-modal-overlay {
+            padding: 10px !important;
+          }
+          .pk-modal-card {
+            width: 100% !important;
+            max-width: 100% !important;
+            max-height: 92vh !important;
+            border-radius: 18px !important;
+          }
+          .pk-modal-head {
+            padding: 12px 14px !important;
+          }
+          .pk-modal-body {
+            padding: 12px 14px !important;
+          }
+          .pk-modal-footer {
+            padding: 12px 14px !important;
+            flex-direction: column-reverse !important;
+          }
+          .pk-modal-footer button {
+            width: 100% !important;
+            text-align: center !important;
+          }
+        }
+
+        @media(max-width: 390px) {
+          .pk-brand-title {
+            display: none !important;
+          }
+          .pk-loc-btn-name {
+            max-width: 60px !important;
           }
         }
 

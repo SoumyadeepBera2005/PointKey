@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ========================================================
+   GLOBAL SCROLLBAR HIDING
+   Hides the browser scrollbar completely across the entire website
+   while maintaining smooth, natural scrollability (wheel, touch & trackpad).
+   ======================================================== */
+html,
+body,
+#root,
+* {
+  scrollbar-width: none !important; /* Firefox */
+  -ms-overflow-style: none !important; /* IE and Edge */
+}
+
+::-webkit-scrollbar,
+*::-webkit-scrollbar,
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+
+body {
+  background-color: #FBF8F2;
+  color: #1e293b;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: #17324D;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+@layer components {
+  .glass-card {
+    background-color: #F4EBDD;
+    border: 1px solid #E8DCB9;
+    border-radius: 1rem;
+    box-shadow: 0 8px 30px rgba(23, 50, 77, 0.07);
+    transition: all 0.2s ease-out;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-[#4F7A63] px-5 py-2.5 font-semibold text-white shadow-md transition-all duration-200 hover:bg-[#3E614E] hover:shadow-lg active:scale-95 disabled:opacity-50 disabled:active:scale-100;
+  }
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-[#4F7A63] px-5 py-2.5 font-semibold text-[#4F7A63] transition-all duration-200 hover:bg-[#4F7A63] hover:text-white active:scale-95;
+  }
+  .btn-orange {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-[#FF7A00] px-5 py-2.5 font-semibold text-white shadow-md transition-all duration-200 hover:bg-[#E56D00] hover:shadow-lg active:scale-95 disabled:opacity-50;
+  }
+  .input {
+    @apply w-full rounded-xl border border-[#E8DCB9] bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-[#4F7A63] focus:ring-2 focus:ring-[#4F7A63]/20;
+  }
+  .label {
+    @apply mb-1.5 block text-xs font-semibold uppercase tracking-wide text-[#17324D]/80;
+  }
+  .nav-link {
+    @apply flex flex-col items-center gap-0.5 text-[10px] font-medium text-slate-500 transition-colors;
+  }
+  .nav-link.active {
+    @apply text-[#4F7A63] font-bold;
+  }
+  .pill {
+    @apply rounded-full border border-[#E8DCB9] bg-white px-4 py-2 text-sm font-medium text-[#17324D] transition-all duration-300 hover:border-[#4F7A63] hover:text-[#4F7A63];
+  }
+  .pill-active {
+    @apply border-[#4F7A63] bg-[#4F7A63] text-white shadow-md;
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "prent-backend",
+  "version": "1.0.0",
+  "description": "pRent API gateway — auth, search, payments, visits, ratings, admin",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.7.7",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "form-data": "^4.0.1",
+    "ioredis": "^5.4.1",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
+    "mysql2": "^3.11.3",
+    "nodemailer": "^10.6.0",
+    "razorpay": "^2.9.4",
+    "socket.io": "^4.8.1"
+  }
+}

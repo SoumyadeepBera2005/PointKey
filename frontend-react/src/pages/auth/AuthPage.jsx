@@ -990,6 +990,21 @@ export default function AuthPage() {
                 Enter the 6-digit code sent to <strong>{maskedEmail}</strong>.
               </p>
 
+              {devOtp && (
+                <div style={{
+                  background: '#fef3c7',
+                  border: '1.5px solid #f59e0b',
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  marginBottom: '16px',
+                  color: '#92400e',
+                  fontSize: '13px',
+                  textAlign: 'center'
+                }}>
+                  ⚠️ ইমেইল ডেলিভারি না হওয়ায় ব্যাকআপ কোড: <strong style={{ fontSize: '17px', letterSpacing: '2px', color: '#1f4d3f' }}>{devOtp}</strong>
+                </div>
+              )}
+
               {/* OTP Validation Countdown Timer */}
               <div className="pk-timer-wrap">
                 {otpSecondsLeft > 0 ? (
@@ -1326,6 +1341,21 @@ export default function AuthPage() {
             <div>
               <h1 className="pk-title">Enter new password</h1>
               <p className="pk-sub">Check your email for the 6-digit code.</p>
+
+              {resetDevOtp && (
+                <div style={{
+                  background: '#fef3c7',
+                  border: '1.5px solid #f59e0b',
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  marginBottom: '16px',
+                  color: '#92400e',
+                  fontSize: '13px',
+                  textAlign: 'center'
+                }}>
+                  ⚠️ ব্যাকআপ রিসেট কোড: <strong style={{ fontSize: '17px', letterSpacing: '2px', color: '#1f4d3f' }}>{resetDevOtp}</strong>
+                </div>
+              )}
 
               {/* OTP Validation Countdown Timer */}
               <div className="pk-timer-wrap">

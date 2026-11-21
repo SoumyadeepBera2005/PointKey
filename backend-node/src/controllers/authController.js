@@ -72,7 +72,37 @@ async function deliverEmailOtp(email, code) {
     </html>
   `;
 
-  // 1. Resend REST API (Runs over Port 443 HTTPS - 100% works on Render Free Tier!)
+  // 1. Brevo REST API (Sends to ANY email address for free, no custom domain needed — Port 443 HTTPS)
+  if (process.env.BREVO_API_KEY) {
+    try {
+      const axios = require('axios');
+      const senderEmail = process.env.BREVO_SENDER_EMAIL || process.env.EMAIL_SMTP_USER || 'pointkey.official@gmail.com';
+      await axios.post(
+        'https://api.brevo.com/v3/smtp/email',
+        {
+          sender: { name: 'PointKey', email: senderEmail },
+          to: [{ email: email }],
+          subject,
+          htmlContent: htmlMessage,
+          textContent: textMessage,
+        },
+        {
+          headers: {
+            'api-key': process.env.BREVO_API_KEY.trim(),
+            'Content-Type': 'application/json',
+          },
+          timeout: 10000,
+        }
+      );
+      console.log(`[EMAIL OTP] Successfully dispatched OTP to ${maskEmail(email)} via Brevo API`);
+      return;
+    } catch (e) {
+      console.error(`[EMAIL OTP] Brevo API error:`, e.response?.data || e.message);
+      throw new Error(`Brevo send failed: ${e.response?.data?.message || e.message}`);
+    }
+  }
+
+  // 2. Resend REST API (Runs over Port 443 HTTPS - Sandbox allows account owner, domain sends to all)
   if (process.env.RESEND_API_KEY) {
     try {
       const axios = require('axios');
@@ -243,8 +273,9 @@ async function login(req, res, next) {
       otp_required: true,
       message: emailSent
         ? `OTP sent to ${maskEmail(user.email)}`
-        : `Email delivery failed. Please try again.`,
+        : `Email delivery failed. Verification code: ${code}`,
       email: maskEmail(user.email),
+      ...(emailSent ? {} : { dev_otp: code }),
     });
   } catch (e) { next(e); }
 }
@@ -284,19 +315,22 @@ async function forgotPassword(req, res, next) {
     if (!email) return res.status(400).json({ message: 'email is required' });
     const normalizedEmail = String(email).trim().toLowerCase();
 
+    let emailSent = false;
     const [[user]] = await db.query('SELECT id FROM users WHERE email = ? LIMIT 1', [normalizedEmail]);
     if (user) {
       const code = generateOtp();
       await cacheSet(`otp:reset:${normalizedEmail}`, code, OTP_TTL);
       try {
         await deliverEmailOtp(normalizedEmail, code);
+        emailSent = true;
       } catch (e) {
         console.warn(`[AUTH] Forgot password email failed: ${e.message}`);
       }
+      return res.json({
+        message: 'If an account exists for this email, an OTP has been sent to it',
+        ...(emailSent ? {} : { dev_otp: code }),
+      });
     }
-    return res.json({
-      message: 'If an account exists for this email, an OTP has been sent to it',
-    });
   } catch (e) { next(e); }
 }
 

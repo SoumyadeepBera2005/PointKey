@@ -218,10 +218,12 @@ async function signup(req, res, next) {
     if (pairHits.length) return res.status(409).json({ message: `A ${r.toLowerCase()} account already exists for this phone number` });
 
     const hash = await bcrypt.hash(String(password), 10);
+    const safeGender = tenant_gender ? String(tenant_gender).trim().toUpperCase() : null;
+    const safeOcc = tenant_occupation ? String(tenant_occupation).trim() : null;
     const [{ insertId }] = await db.query(
       `INSERT INTO users (full_name, email, phone, whatsapp_number, password_hash, role, tenant_gender, tenant_occupation)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [full_name, normalizedEmail, normalizedPhone, whatsapp_number ? normalizePhone(whatsapp_number) : null, hash, r, tenant_gender || null, tenant_occupation || null]
+      [full_name, normalizedEmail, normalizedPhone, whatsapp_number ? normalizePhone(whatsapp_number) : null, hash, r, safeGender, safeOcc]
     );
     const [[user]] = await db.query('SELECT * FROM users WHERE email = ?', [normalizedEmail]);
     return res.status(201).json({ token: signToken(user), user: publicUser(user) });

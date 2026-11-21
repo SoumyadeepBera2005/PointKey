@@ -2,7 +2,7 @@ CREATE DATABASE IF NOT EXISTS prent_db CHARACTER SET utf8mb4 COLLATE utf8mb4_uni
 USE prent_db;
 
 -- 1. Users Table (Tenant, Owner, Admin)
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     full_name VARCHAR(100) NOT NULL,
     email VARCHAR(155) UNIQUE NOT NULL,
@@ -23,7 +23,7 @@ CREATE TABLE users (
 ) ENGINE=InnoDB;
 
 -- 2. Owner AI Face Verification Table
-CREATE TABLE owner_verifications (
+CREATE TABLE IF NOT EXISTS owner_verifications (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     owner_id CHAR(36) NOT NULL,
     id_card_type VARCHAR(50) NOT NULL,
@@ -39,7 +39,7 @@ CREATE TABLE owner_verifications (
 ) ENGINE=InnoDB;
 
 -- 3. Properties Table (Includes all wireframe attributes & Spatial Point)
-CREATE TABLE properties (
+CREATE TABLE IF NOT EXISTS properties (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     property_code VARCHAR(20) UNIQUE NOT NULL, -- e.g., R01, R02
     owner_id CHAR(36) NOT NULL,
@@ -77,7 +77,7 @@ CREATE TABLE properties (
 ) ENGINE=InnoDB;
 
 -- 4. Timestamped Property Media (Bedroom, Bathroom, Kitchen, Balcony)
-CREATE TABLE property_media (
+CREATE TABLE IF NOT EXISTS property_media (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     property_id CHAR(36) NOT NULL,
     room_tag ENUM('BEDROOM', 'BATHROOM', 'KITCHEN', 'BALCONY', 'EXTERIOR') NOT NULL,
@@ -89,7 +89,7 @@ CREATE TABLE property_media (
 ) ENGINE=InnoDB;
 
 -- 5. Payments & 100% Refundable Ledger
-CREATE TABLE payments (
+CREATE TABLE IF NOT EXISTS payments (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     payer_id CHAR(36) NOT NULL,
     property_id CHAR(36) NOT NULL,
@@ -105,7 +105,7 @@ CREATE TABLE payments (
 ) ENGINE=InnoDB;
 
 -- 6. Visit Bookings & Slot Management
-CREATE TABLE visit_bookings (
+CREATE TABLE IF NOT EXISTS visit_bookings (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     property_id CHAR(36) NOT NULL,
     tenant_id CHAR(36) NOT NULL,
@@ -117,18 +117,15 @@ CREATE TABLE visit_bookings (
     status ENUM('REQUESTED', 'CONFIRMED', 'RESCHEDULED', 'COMPLETED', 'CANCELLED') DEFAULT 'REQUESTED',
     agreement_proof_url TEXT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_visit_slot (property_id, visit_date, time_slot),
     FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE,
     FOREIGN KEY (tenant_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
--- Slot lookup index; double-booking is prevented at the application layer
--- (transaction + existence check on active statuses) in visitController.js
-CREATE INDEX idx_visit_slot ON visit_bookings (property_id, visit_date, time_slot);
-
 -- 7. Two-Way Ratings (Tenant <-> Property & Owner <-> Tenant)
-CREATE TABLE ratings (
+CREATE TABLE IF NOT EXISTS ratings (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     reviewer_id CHAR(36) NOT NULL,
     target_user_id CHAR(36) NULL,
@@ -140,7 +137,7 @@ CREATE TABLE ratings (
 ) ENGINE=InnoDB;
 
 -- 8. Scam Reports & Help Tickets
-CREATE TABLE reports_and_tickets (
+CREATE TABLE IF NOT EXISTS reports_and_tickets (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     reporter_id CHAR(36) NOT NULL,
     target_user_id CHAR(36) NULL,
@@ -154,7 +151,7 @@ CREATE TABLE reports_and_tickets (
 ) ENGINE=InnoDB;
 
 -- 9. Chat Messages (persisted Socket.io tenant <-> owner conversations)
-CREATE TABLE chat_messages (
+CREATE TABLE IF NOT EXISTS chat_messages (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     property_id CHAR(36) NOT NULL,
     sender_id CHAR(36) NOT NULL,
@@ -168,7 +165,7 @@ CREATE TABLE chat_messages (
 ) ENGINE=InnoDB;
 
 -- 10. Admin Audit Log (verified-listing deletion etc.)
-CREATE TABLE admin_audit_log (
+CREATE TABLE IF NOT EXISTS admin_audit_log (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     admin_id CHAR(36) NOT NULL,
     action VARCHAR(100) NOT NULL,

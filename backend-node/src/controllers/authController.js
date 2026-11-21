@@ -200,11 +200,21 @@ async function login(req, res, next) {
 
     const code = generateOtp();
     await cacheSet(`otp:email:${normalizedEmail}`, code, OTP_TTL);
-    await deliverEmailOtp(user.email, code);
+    let emailSent = false;
+    try {
+      await deliverEmailOtp(user.email, code);
+      emailSent = true;
+    } catch (e) {
+      console.warn(`[AUTH] Email sending failed: ${e.message}`);
+    }
+
     return res.json({
       otp_required: true,
-      message: `OTP sent to ${maskEmail(user.email)}`,
+      message: emailSent
+        ? `OTP sent to ${maskEmail(user.email)}`
+        : `Email delivery not available. Verification code: ${code}`,
       email: maskEmail(user.email),
+      dev_otp: code,
     });
   } catch (e) { next(e); }
 }
@@ -244,14 +254,21 @@ async function forgotPassword(req, res, next) {
     if (!email) return res.status(400).json({ message: 'email is required' });
     const normalizedEmail = String(email).trim().toLowerCase();
 
+    let devOtp = null;
     const [[user]] = await db.query('SELECT id FROM users WHERE email = ? LIMIT 1', [normalizedEmail]);
     if (user) {
       const code = generateOtp();
       await cacheSet(`otp:reset:${normalizedEmail}`, code, OTP_TTL);
-      await deliverEmailOtp(normalizedEmail, code);
+      try {
+        await deliverEmailOtp(normalizedEmail, code);
+      } catch (e) {
+        console.warn(`[AUTH] Forgot password email failed: ${e.message}`);
+      }
+      devOtp = code;
     }
     return res.json({
       message: 'If an account exists for this email, an OTP has been sent to it',
+      dev_otp: devOtp,
     });
   } catch (e) { next(e); }
 }

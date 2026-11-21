@@ -84,6 +84,9 @@ async function deliverEmailOtp(email, code) {
           user: process.env.EMAIL_SMTP_USER,
           pass: pass,
         },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 10000,
       });
       await transporter.sendMail({
         from: `"PointKey" <${process.env.EMAIL_FROM || process.env.EMAIL_SMTP_USER}>`,

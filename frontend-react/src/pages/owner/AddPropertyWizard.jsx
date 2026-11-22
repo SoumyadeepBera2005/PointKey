@@ -1,17 +1,22 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, PlusCircle } from 'lucide-react';
+import { Loader2, PlusCircle, AlertTriangle, Ban } from 'lucide-react';
 import Navbar from '../../components/common/Navbar';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import Toast from '../../components/common/Toast';
 import api from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
 const ROOM_MATERIALS = ['Bed', 'Table', 'Chair', 'Light', 'Fan', 'Gas', 'Oven'];
 const TRANSPORT = ['Bus', 'Auto', 'Toto', 'Rickshaw'];
 
 export default function AddPropertyWizard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isSuspended = user?.account_status === 'SUSPENDED';
+  const isBlocked = user?.account_status === 'BLOCKED';
+
   const [step, setStep] = useState(1);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState(null);
@@ -33,6 +38,14 @@ export default function AddPropertyWizard() {
   const toggleArr = (key, item) => setForm({ ...form, [key]: form[key].includes(item) ? form[key].filter((x) => x !== item) : [...form[key], item] });
 
   const submit = async () => {
+    if (isSuspended) {
+      setToast({ type: 'error', message: '⚠️ Property creation is disabled: Your owner account is suspended (Strike 1). Please submit an appeal on Owner Home.' });
+      return;
+    }
+    if (isBlocked) {
+      setToast({ type: 'error', message: '⛔ Account permanently blocked (Strike 2).' });
+      return;
+    }
     setBusy(true);
     try {
       const { room_materials, market, atm, station, transport, ...rest } = form;
@@ -65,6 +78,26 @@ export default function AddPropertyWizard() {
       <main className="mx-auto max-w-2xl px-4 py-6">
         <div className="glass-card p-6">
           <h1 className="flex items-center gap-2 text-xl font-black text-slate-800"><PlusCircle className="text-trust" /> Add Property</h1>
+
+          {isSuspended && (
+            <div className="mt-3 flex items-start gap-2.5 rounded-2xl border border-amber-300 bg-amber-50 p-3.5 text-xs text-amber-950">
+              <AlertTriangle size={20} className="shrink-0 text-amber-600 mt-0.5" />
+              <div>
+                <strong className="block font-bold">Property Creation Disabled (Strike 1)</strong>
+                <span>Your account is suspended by Admin due to rule violation: &quot;{user?.block_reason || 'AI fake room images / off-platform payment attempt'}&quot;. You cannot publish new listings until your unblock appeal is approved.</span>
+              </div>
+            </div>
+          )}
+
+          {isBlocked && (
+            <div className="mt-3 flex items-start gap-2.5 rounded-2xl border border-rose-300 bg-rose-50 p-3.5 text-xs text-rose-950">
+              <Ban size={20} className="shrink-0 text-rose-600 mt-0.5" />
+              <div>
+                <strong className="block font-bold">Account Permanently Blocked (Strike 2)</strong>
+                <span>Multiple rule violations detected. You cannot add listings.</span>
+              </div>
+            </div>
+          )}
           <div className="mt-3 flex gap-2">
             {[1, 2, 3].map((s) => (
               <div key={s} className={`h-1.5 flex-1 rounded-full transition ${step >= s ? 'bg-trust' : 'bg-slate-200'}`} />

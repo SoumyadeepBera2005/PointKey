@@ -19,6 +19,7 @@ const io = new Server(server, {
   cors: { origin: process.env.CLIENT_ORIGIN || '*', methods: ['GET', 'POST'] },
 });
 registerChatHandler(io);
+app.set('io', io);
 
 app.use(cors({ origin: process.env.CLIENT_ORIGIN || '*' }));
 app.use(express.json({ limit: '2mb' }));

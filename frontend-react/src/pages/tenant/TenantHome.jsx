@@ -4,6 +4,7 @@ import Navbar from '../../components/common/Navbar';
 import BottomNav from '../../components/common/BottomNav';
 import HomeMateChatbot from '../../components/ai/HomeMateChatbot';
 import { SAMPLE_PROPERTIES } from '../../data/sampleProperties';
+import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 
 function generateDynamicCityProperties(city) {
@@ -258,6 +259,10 @@ const FAQS = [
 
 export default function TenantHome() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isSuspended = user?.account_status === 'SUSPENDED';
+  const isBlocked = user?.account_status === 'BLOCKED';
+  const isRestricted = isSuspended || isBlocked;
 
   // Active platform pillar: 'SearchKart' | 'FacilityKart' | 'BudgetKart'
   const [activePillar, setActivePillar] = useState('SearchKart');
@@ -336,6 +341,19 @@ export default function TenantHome() {
     }, 3200);
   };
 
+  // Handle blocked / suspended user attempt on services and features
+  const handleRestrictedAction = (actionName = 'This service') => {
+    if (isBlocked) {
+      showToast(`⛔ Account Blocked (Strike 2): ${actionName} is permanently disabled due to repeated rule violations.`);
+      return true;
+    }
+    if (isSuspended) {
+      showToast(`⚠️ Account Suspended (Strike 1): ${actionName} is disabled. Open the NestAI chatbot to submit an unblock appeal.`);
+      return true;
+    }
+    return false;
+  };
+
   // Sync favorites across tabs and window
   useEffect(() => {
     const syncFavs = () => {
@@ -351,6 +369,22 @@ export default function TenantHome() {
       window.removeEventListener('prent_fav_change', syncFavs);
       window.removeEventListener('storage', syncFavs);
     };
+  }, []);
+
+  // Listen for real-time account status changes (Admin Strike 1 / Strike 2 or Reinstatement)
+  useEffect(() => {
+    const handleStatusSync = (e) => {
+      const data = e.detail;
+      if (data?.account_status === 'BLOCKED') {
+        showToast('⛔ Alert: Your account has been permanently blocked by Admin (Strike 2). Platform access is restricted.');
+      } else if (data?.account_status === 'SUSPENDED') {
+        showToast('⚠️ Alert: Your account has been suspended by Admin (Strike 1). View Details & Payments are disabled. Check notifications.');
+      } else if (data?.account_status === 'ACTIVE') {
+        showToast('✅ Great news! Your PointKey account access has been fully restored.');
+      }
+    };
+    window.addEventListener('prent_user_status_changed', handleStatusSync);
+    return () => window.removeEventListener('prent_user_status_changed', handleStatusSync);
   }, []);
 
   // Listen to window scroll to stick search bar when past hero (OYO style)
@@ -535,7 +569,9 @@ export default function TenantHome() {
   const displayListings = hasDirectMatches ? sortedListings : allProperties.slice(0, 12);
 
   // Track clicked properties into recently viewed
+  // সাসপেন্ডেড (Strike 1) বা পার্মানেন্ট ব্লকড (Strike 2) হলে ডিটেইলস এক্সেস ব্লক করা হয়
   const handleCardClick = (prop) => {
+    if (handleRestrictedAction('View Details')) return;
     try {
       const recents = JSON.parse(localStorage.getItem('prent_recent_homes') || '[]');
       const filtered = recents.filter((r) => r.id !== prop.id);
@@ -563,6 +599,7 @@ export default function TenantHome() {
   // Handle Quick Expense addition in BudgetKart
   const handleQuickAddExpense = (e) => {
     e.preventDefault();
+    if (handleRestrictedAction('Expense tracking')) return;
     const amt = Number(quickAmount);
     if (!quickLabel.trim() || isNaN(amt) || amt <= 0) {
       showToast('Please enter a valid expense name and amount.');
@@ -587,15 +624,14 @@ export default function TenantHome() {
 
   // Remove single tracked expense
   const handleRemoveExpense = (id) => {
+    if (handleRestrictedAction('Modifying tracked expenses')) return;
     const target = expenseLedger.find((item) => item.id === id);
     const updated = expenseLedger.filter((item) => item.id !== id);
     setExpenseLedger(updated);
     try {
       localStorage.setItem('prent_tracked_expenses', JSON.stringify(updated));
     } catch { }
-    if (target) {
-      showToast(`Removed "${target.label}" from tracked expenses.`);
-    }
+    showToast(`Removed "${target?.label || 'Item'}" from tracked expenses.`);
   };
 
   // Toggle single FAQ
@@ -628,11 +664,11 @@ export default function TenantHome() {
         /* HERO SECTION */
         .pk-hero-root {
           position: relative;
-          min-height: 560px;
+          min-height: clamp(680px, 82vh, 840px);
           display: flex;
           align-items: center;
           justify-content: center;
-          padding: 104px 20px 84px;
+          padding: 132px 24px 116px;
           background: #0F172A;
           color: #ffffff;
           overflow: hidden;
@@ -670,9 +706,9 @@ export default function TenantHome() {
           z-index: 2;
           background: linear-gradient(
             to bottom,
-            rgba(15, 23, 42, 0.72) 0%,
-            rgba(17, 24, 39, 0.52) 50%,
-            rgba(15, 23, 42, 0.85) 100%
+            rgba(15, 23, 42, 0.76) 0%,
+            rgba(17, 24, 39, 0.64) 50%,
+            rgba(15, 23, 42, 0.88) 100%
           );
         }
 
@@ -722,13 +758,14 @@ export default function TenantHome() {
         }
 
         .pk-hero-subtitle {
-          font-size: clamp(14px, 1.8vw, 17px);
+          font-size: clamp(15px, 2vw, 18px);
+          font-weight: 700;
           line-height: 1.6;
-          max-width: 680px;
+          max-width: 720px;
           margin: 0 auto 32px;
-          color: #f8fafc;
-          opacity: 0.95;
-          text-shadow: 0 1px 12px rgba(0, 0, 0, 0.6);
+          color: #ffffff;
+          letter-spacing: 0.01em;
+          text-shadow: 0 2px 14px rgba(0, 0, 0, 0.95), 0 1px 4px rgba(0, 0, 0, 0.95);
         }
 
         /* SEARCH BAR CARD */
@@ -1011,7 +1048,12 @@ export default function TenantHome() {
           transform: translateY(-1px);
         }
 
-        /* MOBILE PILLAR SWITCHER BAR */
+        /* =====================================================================
+         * MOBILE PILLAR SWITCHER BAR (<860px)
+         * মোবাইলে হেডারের সেন্টার বারটি লুকিয়ে যায়, তাই মোবাইলের জন্য হিরো সেকশনের নিচে
+         * এই স্টিকি পিলার বারটি (SearchKart | FacilityKart | BudgetKart) দেওয়া হয়েছে
+         * যাতে ব্যবহারকারী মোবাইল থেকে এক ক্লিকেই তিন স্তম্ভে যেতে পারেন।
+         * ===================================================================== */
         .pk-mobile-pillar-bar {
           display: none;
         }
@@ -1057,6 +1099,7 @@ export default function TenantHome() {
           }
         }
 
+        /* মোবাইল স্ক্রিনের জন্য হিরো ও ফিল্টার ক্যারোসেল অপ্টিমাইজেশন */
         @media (max-width: 768px) {
           .pk-hero-root {
             min-height: 440px !important;
@@ -1068,9 +1111,11 @@ export default function TenantHome() {
             margin-bottom: 12px !important;
           }
           .pk-hero-subtitle {
-            font-size: 13.5px !important;
+            font-size: 14.5px !important;
+            font-weight: 700 !important;
             line-height: 1.5 !important;
-            margin-bottom: 20px !important;
+            margin-bottom: 22px !important;
+            text-shadow: 0 2px 12px rgba(0, 0, 0, 0.95) !important;
           }
           .pk-searchbar-card {
             padding: 6px 6px 6px 14px !important;
@@ -1540,6 +1585,24 @@ export default function TenantHome() {
           transform: scale(1.01);
         }
 
+        .pk-view-details-btn.is-suspended {
+          background: #d97706 !important;
+          color: #ffffff !important;
+          cursor: not-allowed !important;
+          opacity: 0.9 !important;
+          transform: none !important;
+          box-shadow: none !important;
+        }
+
+        .pk-view-details-btn.is-blocked {
+          background: #dc2626 !important;
+          color: #ffffff !important;
+          cursor: not-allowed !important;
+          opacity: 0.9 !important;
+          transform: none !important;
+          box-shadow: none !important;
+        }
+
         /* FACILITYKART SERVICE TILES */
         .pk-service-tiles-shell {
           margin-top: 56px;
@@ -1589,6 +1652,19 @@ export default function TenantHome() {
           background: #ffffff;
           border-color: #1E3A8A;
           box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.35), 0 12px 24px rgba(15, 23, 42, 0.1);
+        }
+
+        .pk-service-tile.is-disabled {
+          opacity: 0.55 !important;
+          cursor: not-allowed !important;
+          filter: grayscale(0.65) !important;
+        }
+
+        .pk-service-tile.is-disabled:hover {
+          background: #FAF8F4 !important;
+          border-color: #EBE3D3 !important;
+          transform: none !important;
+          box-shadow: none !important;
         }
 
         .pk-service-icon {
@@ -2112,11 +2188,6 @@ export default function TenantHome() {
 
         {/* Hero Text & Search Box */}
         <div className="pk-hero-content">
-          <div className="pk-hero-kicker">
-            <span className="pk-kicker-dot" />
-            <span>VERIFIED RENTALS • SERVICES • EXPENSE MANAGEMENT</span>
-          </div>
-
           <h1 className="pk-hero-title">
             Find a home that feels <span>right.</span>
           </h1>
@@ -2215,11 +2286,8 @@ export default function TenantHome() {
             </button>
           </div>
 
-          {/* Quick Locality Links (like OYO's city links in Image 1) */}
+          {/* Quick Popular Area Links (সরাসরি পিল হিসেবে অটোমেটিক দেখাবে, কোনো লেবেল ছাড়া) */}
           <div className="pk-hero-locations">
-            <span className="pk-loc-label">
-              Popular in {selectedCity && (selectedCity.toLowerCase().includes('medinipur') || selectedCity.toLowerCase().includes('midnapore')) ? 'Purba Medinipur' : selectedCity}:
-            </span>
             {(selectedCity && (selectedCity.toLowerCase().includes('medinipur') || selectedCity.toLowerCase().includes('midnapore'))
               ? ['Tamluk', 'Haldia', 'Digha', 'Contai', 'Kolaghat', 'Mecheda', 'Mahishadal', 'Panskura']
               : ['Salt Lake', 'New Town', 'Rajarhat', 'Ballygunge', 'Garia', 'Jadavpur', 'Behala', 'Howrah']
@@ -2270,6 +2338,72 @@ export default function TenantHome() {
 
       {/* MAIN CONTENT AREA */}
       <main className="pk-main-content">
+        {/* ========================================================================= */}
+        {/* CRITICAL SUSPENSION & BLOCK BANNER (FOR SUSPENDED / BLOCKED TENANTS)      */}
+        {/* ========================================================================= */}
+        {user?.account_status === 'BLOCKED' && (
+          <div
+            style={{
+              marginBottom: '20px',
+              padding: '16px 20px',
+              borderRadius: '16px',
+              background: '#fef2f2',
+              border: '2px solid #ef4444',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '14px',
+              boxShadow: '0 8px 24px rgba(239, 68, 68, 0.15)',
+            }}
+          >
+            <span style={{ fontSize: '28px', lineHeight: 1 }}>⛔</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ background: '#dc2626', color: '#fff', fontSize: '10px', fontWeight: 900, padding: '2px 8px', borderRadius: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Strike 2 Penalty
+                </span>
+                <strong style={{ fontSize: '15px', color: '#991b1b' }}>Account Permanently Blocked by Admin</strong>
+              </div>
+              <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#7f1d1d', lineHeight: 1.5 }}>
+                <strong>Reason:</strong> {user.block_reason || 'Repeated rule violations'}.
+                Under PointKey zero-tolerance community safety policies, all access to view property details, in-person visits, and payments is permanently blocked. No appeals are permitted.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {user?.account_status === 'SUSPENDED' && (
+          <div
+            style={{
+              marginBottom: '20px',
+              padding: '16px 20px',
+              borderRadius: '16px',
+              background: '#fffbeb',
+              border: '2px solid #f59e0b',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '14px',
+              boxShadow: '0 8px 24px rgba(245, 158, 11, 0.15)',
+            }}
+          >
+            <span style={{ fontSize: '28px', lineHeight: 1 }}>⚠️</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ background: '#d97706', color: '#fff', fontSize: '10px', fontWeight: 900, padding: '2px 8px', borderRadius: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Strike 1 Penalty
+                </span>
+                <strong style={{ fontSize: '15px', color: '#92400e' }}>Account Suspended by Admin</strong>
+              </div>
+              <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#78350f', lineHeight: 1.5 }}>
+                <strong>Reason:</strong> {user.block_reason || 'Platform rules and regulations violation'}.
+                Your access to &apos;View Details&apos; and advance payments has been restricted by Admin.
+              </p>
+              <p style={{ margin: '6px 0 0', fontSize: '11.5px', color: '#1f4d3f', fontWeight: 700 }}>
+                👉 Open the NestAI Assistant (bottom right) to review the platform rules undertaking and submit an unblock appeal.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* ========================================================================= */}
         {/* PILLAR 1: SEARCHKART VIEW                                                 */}
         {/* ========================================================================= */}
@@ -2425,14 +2559,31 @@ export default function TenantHome() {
 
                       <button
                         type="button"
-                        className="pk-view-details-btn"
+                        disabled={user?.account_status === 'SUSPENDED' || user?.account_status === 'BLOCKED'}
+                        className={`pk-view-details-btn ${user?.account_status === 'SUSPENDED' ? 'is-suspended' : user?.account_status === 'BLOCKED' ? 'is-blocked' : ''}`}
                         onClick={(e) => {
                           e.stopPropagation();
+                          if (user?.account_status === 'SUSPENDED') {
+                            showToast('⚠️ Your account is suspended for rule violation (Strike 1). View Details is disabled. Open the NestAI chatbot to submit an unblock appeal.');
+                            return;
+                          }
+                          if (user?.account_status === 'BLOCKED') {
+                            showToast('⛔ Your account is permanently blocked (Strike 2) due to repeated rule violations.');
+                            return;
+                          }
                           navigate(`/tenant/property/${prop.id}`);
                         }}
                       >
-                        <span>View Details</span>
-                        <span>→</span>
+                        {user?.account_status === 'SUSPENDED' ? (
+                          <span>⚠️ Access Suspended</span>
+                        ) : user?.account_status === 'BLOCKED' ? (
+                          <span>⛔ Account Blocked</span>
+                        ) : (
+                          <>
+                            <span>View Details</span>
+                            <span>→</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   </article>
@@ -2446,6 +2597,20 @@ export default function TenantHome() {
                 <div>
                   <div className="pk-tag-row">
                     <span className="pk-tag-green">FacilityKart</span>
+                    {isRestricted && (
+                      <span style={{
+                        background: isBlocked ? '#fee2e2' : '#fef3c7',
+                        color: isBlocked ? '#991b1b' : '#92400e',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        padding: '3px 9px',
+                        borderRadius: '9999px',
+                        border: `1px solid ${isBlocked ? '#fca5a5' : '#fde68a'}`,
+                        marginLeft: '8px'
+                      }}>
+                        {isBlocked ? '⛔ Services Blocked' : '⚠️ Services Suspended'}
+                      </span>
+                    )}
                   </div>
                   <h3 style={{ fontSize: '24px', fontWeight: 900, color: '#111827', margin: 0 }}>
                     Everyday <span style={{ color: '#14532D' }}>Home &amp; Living Services</span>
@@ -2472,11 +2637,26 @@ export default function TenantHome() {
                   <button
                     type="button"
                     className="pk-view-details-btn"
-                    style={{ width: 'auto', background: '#14532D', padding: '9px 18px' }}
-                    onClick={() => setActivePillar('FacilityKart')}
+                    style={{
+                      width: 'auto',
+                      background: isBlocked ? '#dc2626' : isSuspended ? '#d97706' : '#14532D',
+                      padding: '9px 18px',
+                      cursor: isRestricted ? 'not-allowed' : 'pointer',
+                      opacity: isRestricted ? 0.85 : 1,
+                    }}
+                    onClick={() => {
+                      if (handleRestrictedAction('FacilityKart')) return;
+                      setActivePillar('FacilityKart');
+                    }}
                   >
-                    <span>Open FacilityKart</span>
-                    <span>→</span>
+                    {isRestricted ? (
+                      <span>🔒 FacilityKart Locked</span>
+                    ) : (
+                      <>
+                        <span>Open FacilityKart</span>
+                        <span>→</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -2484,78 +2664,92 @@ export default function TenantHome() {
               <div className="pk-service-tiles-grid">
                 {/* 1. HomeService */}
                 <div
-                  className={`pk-service-tile ${selectedService === 'HomeService' ? 'highlighted' : ''}`}
+                  className={`pk-service-tile ${isRestricted ? 'is-disabled' : selectedService === 'HomeService' ? 'highlighted' : ''}`}
                   onClick={() => {
+                    if (handleRestrictedAction('HomeService')) return;
                     setSelectedService('HomeService');
                     showToast('HomeService (Home & Repair Support) selected in FacilityKart');
                   }}
+                  title={isRestricted ? 'Service disabled due to account penalty' : 'HomeService'}
                 >
-                  <span className="pk-service-icon">🛠️</span>
+                  <span className="pk-service-icon">{isRestricted ? '🔒' : '🛠️'}</span>
                   <span className="pk-service-title">HomeService</span>
-                  <span className="pk-service-sub">(Home &amp; Repair Support)</span>
+                  <span className="pk-service-sub">{isRestricted ? '(Disabled)' : '(Home & Repair Support)'}</span>
                 </div>
 
                 {/* 2. HouseKeeping */}
                 <div
-                  className={`pk-service-tile ${selectedService === 'HouseKeeping' ? 'highlighted' : ''}`}
+                  className={`pk-service-tile ${isRestricted ? 'is-disabled' : selectedService === 'HouseKeeping' ? 'highlighted' : ''}`}
                   onClick={() => {
+                    if (handleRestrictedAction('HouseKeeping')) return;
                     setSelectedService('HouseKeeping');
                     showToast('HouseKeeping (Household Assistance) selected in FacilityKart');
                   }}
+                  title={isRestricted ? 'Service disabled due to account penalty' : 'HouseKeeping'}
                 >
-                  <span className="pk-service-icon">🧹</span>
+                  <span className="pk-service-icon">{isRestricted ? '🔒' : '🧹'}</span>
                   <span className="pk-service-title">HouseKeeping</span>
-                  <span className="pk-service-sub">(Household Assistance)</span>
+                  <span className="pk-service-sub">{isRestricted ? '(Disabled)' : '(Household Assistance)'}</span>
                 </div>
 
                 {/* 3. DoorDrop */}
                 <div
-                  className={`pk-service-tile ${selectedService === 'DoorDrop' ? 'highlighted' : ''}`}
+                  className={`pk-service-tile ${isRestricted ? 'is-disabled' : selectedService === 'DoorDrop' ? 'highlighted' : ''}`}
                   onClick={() => {
+                    if (handleRestrictedAction('DoorDrop')) return;
                     setSelectedService('DoorDrop');
                     showToast('DoorDrop (Daily Deliveries) selected in FacilityKart');
                   }}
+                  title={isRestricted ? 'Service disabled due to account penalty' : 'DoorDrop'}
                 >
-                  <span className="pk-service-icon">📦</span>
+                  <span className="pk-service-icon">{isRestricted ? '🔒' : '📦'}</span>
                   <span className="pk-service-title">DoorDrop</span>
-                  <span className="pk-service-sub">(Daily Deliveries)</span>
+                  <span className="pk-service-sub">{isRestricted ? '(Disabled)' : '(Daily Deliveries)'}</span>
                 </div>
 
                 {/* 4. GharSafar */}
                 <div
-                  className={`pk-service-tile ${selectedService === 'GharSafar' ? 'highlighted' : ''}`}
+                  className={`pk-service-tile ${isRestricted ? 'is-disabled' : selectedService === 'GharSafar' ? 'highlighted' : ''}`}
                   onClick={() => {
+                    if (handleRestrictedAction('GharSafar')) return;
                     setSelectedService('GharSafar');
                     showToast('GharSafar (Shifting & Packing) selected in FacilityKart');
                   }}
+                  title={isRestricted ? 'Service disabled due to account penalty' : 'GharSafar'}
                 >
-                  <span className="pk-service-icon">🚚</span>
+                  <span className="pk-service-icon">{isRestricted ? '🔒' : '🚚'}</span>
                   <span className="pk-service-title">GharSafar</span>
-                  <span className="pk-service-sub">(Shifting &amp; Packing)</span>
+                  <span className="pk-service-sub">{isRestricted ? '(Disabled)' : '(Shifting & Packing)'}</span>
                 </div>
 
                 {/* 5. LifeLine */}
                 <div
-                  className={`pk-service-tile ${selectedService === 'LifeLine' ? 'highlighted' : ''}`}
+                  className={`pk-service-tile ${isRestricted ? 'is-disabled' : selectedService === 'LifeLine' ? 'highlighted' : ''}`}
                   onClick={() => {
+                    if (handleRestrictedAction('LifeLine Emergency Desk')) return;
                     setSelectedService('LifeLine');
                     showToast('LifeLine (Emergency Support) selected in FacilityKart');
                   }}
+                  title={isRestricted ? 'Service disabled due to account penalty' : 'LifeLine'}
                 >
-                  <span className="pk-service-icon">🚨</span>
+                  <span className="pk-service-icon">{isRestricted ? '🔒' : '🚨'}</span>
                   <span className="pk-service-title">LifeLine</span>
-                  <span className="pk-service-sub">(Emergency Support)</span>
+                  <span className="pk-service-sub">{isRestricted ? '(Disabled)' : '(Emergency Support)'}</span>
                 </div>
 
                 {/* 6. Explore More */}
                 <div
-                  className="pk-service-tile"
+                  className={`pk-service-tile ${isRestricted ? 'is-disabled' : ''}`}
                   style={{ background: '#FAF8F4' }}
-                  onClick={() => setActivePillar('FacilityKart')}
+                  onClick={() => {
+                    if (handleRestrictedAction('FacilityKart Services')) return;
+                    setActivePillar('FacilityKart');
+                  }}
+                  title={isRestricted ? 'Services disabled due to account penalty' : 'Explore More'}
                 >
-                  <span className="pk-service-icon">✦</span>
+                  <span className="pk-service-icon">{isRestricted ? '🔒' : '✦'}</span>
                   <span className="pk-service-title">Explore More</span>
-                  <span className="pk-service-sub">All FacilityKart Services</span>
+                  <span className="pk-service-sub">{isRestricted ? '(Disabled)' : 'All FacilityKart Services'}</span>
                 </div>
               </div>
             </section>
@@ -2592,10 +2786,24 @@ export default function TenantHome() {
                 <button
                   type="button"
                   className="pk-open-budget-btn"
-                  onClick={() => setActivePillar('BudgetKart')}
+                  style={{
+                    background: isBlocked ? '#dc2626' : isSuspended ? '#d97706' : '#EA580C',
+                    cursor: isRestricted ? 'not-allowed' : 'pointer',
+                    opacity: isRestricted ? 0.85 : 1,
+                  }}
+                  onClick={() => {
+                    if (handleRestrictedAction('BudgetKart')) return;
+                    setActivePillar('BudgetKart');
+                  }}
                 >
-                  <span>Open BudgetKart</span>
-                  <span>→</span>
+                  {isRestricted ? (
+                    <span>🔒 BudgetKart Locked</span>
+                  ) : (
+                    <>
+                      <span>Open BudgetKart</span>
+                      <span>→</span>
+                    </>
+                  )}
                 </button>
               </div>
 
@@ -2656,22 +2864,33 @@ export default function TenantHome() {
                 <form onSubmit={handleQuickAddExpense} className="pk-quick-expense-form">
                   <input
                     type="text"
-                    placeholder="Expense (e.g. Wi-Fi, Maid)"
+                    placeholder={isRestricted ? '🔒 Expense tracking disabled' : 'Expense (e.g. Wi-Fi, Maid)'}
                     className="pk-quick-input"
-                    style={{ flex: 1 }}
+                    style={{ flex: 1, opacity: isRestricted ? 0.6 : 1, cursor: isRestricted ? 'not-allowed' : 'text' }}
                     value={quickLabel}
+                    disabled={isRestricted}
                     onChange={(e) => setQuickLabel(e.target.value)}
                   />
                   <input
                     type="number"
                     placeholder="₹ Amt"
                     className="pk-quick-input"
-                    style={{ width: '90px' }}
+                    style={{ width: '90px', opacity: isRestricted ? 0.6 : 1, cursor: isRestricted ? 'not-allowed' : 'text' }}
                     value={quickAmount}
+                    disabled={isRestricted}
                     onChange={(e) => setQuickAmount(e.target.value)}
                   />
-                  <button type="submit" className="pk-quick-add-btn">
-                    + Add
+                  <button
+                    type="submit"
+                    disabled={isRestricted}
+                    className="pk-quick-add-btn"
+                    style={{
+                      opacity: isRestricted ? 0.6 : 1,
+                      cursor: isRestricted ? 'not-allowed' : 'pointer',
+                      background: isRestricted ? '#64748b' : undefined,
+                    }}
+                  >
+                    {isRestricted ? 'Locked' : '+ Add'}
                   </button>
                 </form>
 
@@ -2686,7 +2905,9 @@ export default function TenantHome() {
                   }}
                 >
                   <span>
-                    {expenseLedger.length === 0
+                    {isRestricted
+                      ? '🔒 Expense tracking disabled due to account penalty'
+                      : expenseLedger.length === 0
                       ? 'No expenses tracked yet • Add below'
                       : `Latest: ${expenseLedger[0].label} (₹${expenseLedger[0].amount.toLocaleString('en-IN')})`}
                   </span>
@@ -2695,11 +2916,14 @@ export default function TenantHome() {
                     style={{
                       background: 'transparent',
                       border: 0,
-                      color: '#fdba74',
+                      color: isRestricted ? '#94a3b8' : '#fdba74',
                       fontWeight: 700,
-                      cursor: 'pointer',
+                      cursor: isRestricted ? 'not-allowed' : 'pointer',
                     }}
-                    onClick={() => setActivePillar('BudgetKart')}
+                    onClick={() => {
+                      if (handleRestrictedAction('BudgetKart ledger')) return;
+                      setActivePillar('BudgetKart');
+                    }}
                   >
                     Full ledger →
                   </button>
@@ -2799,6 +3023,20 @@ export default function TenantHome() {
               <div>
                 <div className="pk-tag-row">
                   <span className="pk-tag-green">FacilityKart</span>
+                  {isRestricted && (
+                    <span style={{
+                      background: isBlocked ? '#fee2e2' : '#fef3c7',
+                      color: isBlocked ? '#991b1b' : '#92400e',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      padding: '3px 9px',
+                      borderRadius: '9999px',
+                      border: `1px solid ${isBlocked ? '#fca5a5' : '#fde68a'}`,
+                      marginLeft: '8px'
+                    }}>
+                      {isBlocked ? '⛔ Services Blocked' : '⚠️ Services Suspended'}
+                    </span>
+                  )}
                 </div>
                 <h2 className="pk-section-title">Everyday Home Services, On-Demand</h2>
                 <p className="pk-section-desc">
@@ -2815,11 +3053,37 @@ export default function TenantHome() {
               </button>
             </div>
 
+            {isRestricted && (
+              <div style={{
+                marginBottom: '24px',
+                padding: '16px 20px',
+                borderRadius: '16px',
+                background: isBlocked ? '#fef2f2' : '#fffbeb',
+                border: `2px solid ${isBlocked ? '#ef4444' : '#f59e0b'}`,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '14px',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.06)'
+              }}>
+                <span style={{ fontSize: '28px', lineHeight: 1 }}>{isBlocked ? '⛔' : '⚠️'}</span>
+                <div>
+                  <strong style={{ fontSize: '15px', color: isBlocked ? '#991b1b' : '#92400e', display: 'block' }}>
+                    {isBlocked ? 'FacilityKart Services Permanently Blocked (Strike 2)' : 'FacilityKart Services Suspended (Strike 1)'}
+                  </strong>
+                  <p style={{ margin: '4px 0 0', fontSize: '12px', color: isBlocked ? '#7f1d1d' : '#78350f', lineHeight: 1.5 }}>
+                    {isBlocked
+                      ? 'Due to repeated rule violations, all home repair, cleaning, shifting, and delivery service bookings are permanently terminated.'
+                      : 'All service bookings are restricted while your account is suspended. Open the NestAI chatbot to submit an unblock appeal.'}
+                  </p>
+                </div>
+              </div>
+            )}
+
             <div className="pk-facility-grid">
               {/* HomeService */}
-              <div className="pk-facility-card">
-                <div className="pk-facility-icon-wrap" style={{ background: '#fff7ed', color: '#ea580c' }}>
-                  🛠️
+              <div className={`pk-facility-card ${isRestricted ? 'opacity-70' : ''}`}>
+                <div className="pk-facility-icon-wrap" style={{ background: isRestricted ? '#f1f5f9' : '#fff7ed', color: isRestricted ? '#64748b' : '#ea580c' }}>
+                  {isRestricted ? '🔒' : '🛠️'}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <h3 style={{ fontSize: '18px', fontWeight: 800, margin: 0 }}>
@@ -2827,8 +3091,8 @@ export default function TenantHome() {
                   </h3>
                   <span
                     style={{
-                      background: '#ffedd5',
-                      color: '#ea580c',
+                      background: isRestricted ? '#f1f5f9' : '#ffedd5',
+                      color: isRestricted ? '#64748b' : '#ea580c',
                       fontSize: '11px',
                       fontWeight: 800,
                       padding: '4px 10px',
@@ -2843,18 +3107,26 @@ export default function TenantHome() {
                 </p>
                 <button
                   type="button"
+                  disabled={isRestricted}
                   className="pk-book-service-btn"
-                  style={{ background: '#ea580c' }}
-                  onClick={() => showToast('HomeService technician request booked successfully!')}
+                  style={{
+                    background: isRestricted ? '#94a3b8' : '#ea580c',
+                    cursor: isRestricted ? 'not-allowed' : 'pointer',
+                    opacity: isRestricted ? 0.75 : 1
+                  }}
+                  onClick={() => {
+                    if (handleRestrictedAction('HomeService booking')) return;
+                    showToast('HomeService technician request booked successfully!');
+                  }}
                 >
-                  Book HomeService
+                  {isRestricted ? '🔒 Booking Disabled' : 'Book HomeService'}
                 </button>
               </div>
 
               {/* HouseKeeping */}
-              <div className="pk-facility-card">
-                <div className="pk-facility-icon-wrap" style={{ background: '#f0fdf4', color: '#14532d' }}>
-                  🧹
+              <div className={`pk-facility-card ${isRestricted ? 'opacity-70' : ''}`}>
+                <div className="pk-facility-icon-wrap" style={{ background: isRestricted ? '#f1f5f9' : '#f0fdf4', color: isRestricted ? '#64748b' : '#14532d' }}>
+                  {isRestricted ? '🔒' : '🧹'}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <h3 style={{ fontSize: '18px', fontWeight: 800, margin: 0 }}>
@@ -2862,8 +3134,8 @@ export default function TenantHome() {
                   </h3>
                   <span
                     style={{
-                      background: '#dcfce7',
-                      color: '#14532d',
+                      background: isRestricted ? '#f1f5f9' : '#dcfce7',
+                      color: isRestricted ? '#64748b' : '#14532d',
                       fontSize: '11px',
                       fontWeight: 800,
                       padding: '4px 10px',
@@ -2878,18 +3150,26 @@ export default function TenantHome() {
                 </p>
                 <button
                   type="button"
+                  disabled={isRestricted}
                   className="pk-book-service-btn"
-                  style={{ background: '#14532d' }}
-                  onClick={() => showToast('HouseKeeping slot reserved successfully!')}
+                  style={{
+                    background: isRestricted ? '#94a3b8' : '#14532d',
+                    cursor: isRestricted ? 'not-allowed' : 'pointer',
+                    opacity: isRestricted ? 0.75 : 1
+                  }}
+                  onClick={() => {
+                    if (handleRestrictedAction('HouseKeeping booking')) return;
+                    showToast('HouseKeeping slot reserved successfully!');
+                  }}
                 >
-                  Book HouseKeeping
+                  {isRestricted ? '🔒 Booking Disabled' : 'Book HouseKeeping'}
                 </button>
               </div>
 
               {/* DoorDrop */}
-              <div className="pk-facility-card">
-                <div className="pk-facility-icon-wrap" style={{ background: '#eff6ff', color: '#1e3a8a' }}>
-                  📦
+              <div className={`pk-facility-card ${isRestricted ? 'opacity-70' : ''}`}>
+                <div className="pk-facility-icon-wrap" style={{ background: isRestricted ? '#f1f5f9' : '#eff6ff', color: isRestricted ? '#64748b' : '#1e3a8a' }}>
+                  {isRestricted ? '🔒' : '📦'}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <h3 style={{ fontSize: '18px', fontWeight: 800, margin: 0 }}>
@@ -2897,8 +3177,8 @@ export default function TenantHome() {
                   </h3>
                   <span
                     style={{
-                      background: '#dbeafe',
-                      color: '#1e3a8a',
+                      background: isRestricted ? '#f1f5f9' : '#dbeafe',
+                      color: isRestricted ? '#64748b' : '#1e3a8a',
                       fontSize: '11px',
                       fontWeight: 800,
                       padding: '4px 10px',
@@ -2913,18 +3193,26 @@ export default function TenantHome() {
                 </p>
                 <button
                   type="button"
+                  disabled={isRestricted}
                   className="pk-book-service-btn"
-                  style={{ background: '#1e3a8a' }}
-                  onClick={() => showToast('DoorDrop schedule activated for your address!')}
+                  style={{
+                    background: isRestricted ? '#94a3b8' : '#1e3a8a',
+                    cursor: isRestricted ? 'not-allowed' : 'pointer',
+                    opacity: isRestricted ? 0.75 : 1
+                  }}
+                  onClick={() => {
+                    if (handleRestrictedAction('DoorDrop delivery schedule')) return;
+                    showToast('DoorDrop schedule activated for your address!');
+                  }}
                 >
-                  Schedule DoorDrop
+                  {isRestricted ? '🔒 Delivery Disabled' : 'Schedule DoorDrop'}
                 </button>
               </div>
 
               {/* GharSafar */}
-              <div className="pk-facility-card">
-                <div className="pk-facility-icon-wrap" style={{ background: '#eff6ff', color: '#1e3a8a' }}>
-                  🚚
+              <div className={`pk-facility-card ${isRestricted ? 'opacity-70' : ''}`}>
+                <div className="pk-facility-icon-wrap" style={{ background: isRestricted ? '#f1f5f9' : '#eff6ff', color: isRestricted ? '#64748b' : '#1e3a8a' }}>
+                  {isRestricted ? '🔒' : '🚚'}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <h3 style={{ fontSize: '18px', fontWeight: 800, margin: 0 }}>
@@ -2932,8 +3220,8 @@ export default function TenantHome() {
                   </h3>
                   <span
                     style={{
-                      background: '#dbeafe',
-                      color: '#1e3a8a',
+                      background: isRestricted ? '#f1f5f9' : '#dbeafe',
+                      color: isRestricted ? '#64748b' : '#1e3a8a',
                       fontSize: '11px',
                       fontWeight: 800,
                       padding: '4px 10px',
@@ -2948,18 +3236,26 @@ export default function TenantHome() {
                 </p>
                 <button
                   type="button"
+                  disabled={isRestricted}
                   className="pk-book-service-btn"
-                  style={{ background: '#1e3a8a' }}
-                  onClick={() => showToast('GharSafar shifting quote generated!')}
+                  style={{
+                    background: isRestricted ? '#94a3b8' : '#1e3a8a',
+                    cursor: isRestricted ? 'not-allowed' : 'pointer',
+                    opacity: isRestricted ? 0.75 : 1
+                  }}
+                  onClick={() => {
+                    if (handleRestrictedAction('GharSafar shifting quote')) return;
+                    showToast('GharSafar shifting quote generated!');
+                  }}
                 >
-                  Get Shifting Quote
+                  {isRestricted ? '🔒 Shifting Disabled' : 'Get Shifting Quote'}
                 </button>
               </div>
 
               {/* LifeLine */}
-              <div className="pk-facility-card" style={{ gridColumn: 'span 2' }}>
-                <div className="pk-facility-icon-wrap" style={{ background: '#fef2f2', color: '#b91c1c' }}>
-                  🚨
+              <div className={`pk-facility-card ${isRestricted ? 'opacity-70' : ''}`} style={{ gridColumn: 'span 2' }}>
+                <div className="pk-facility-icon-wrap" style={{ background: isRestricted ? '#f1f5f9' : '#fef2f2', color: isRestricted ? '#64748b' : '#b91c1c' }}>
+                  {isRestricted ? '🔒' : '🚨'}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <h3 style={{ fontSize: '18px', fontWeight: 800, margin: 0 }}>
@@ -2967,8 +3263,8 @@ export default function TenantHome() {
                   </h3>
                   <span
                     style={{
-                      background: '#fee2e2',
-                      color: '#b91c1c',
+                      background: isRestricted ? '#f1f5f9' : '#fee2e2',
+                      color: isRestricted ? '#64748b' : '#b91c1c',
                       fontSize: '11px',
                       fontWeight: 800,
                       padding: '4px 10px',
@@ -2984,11 +3280,20 @@ export default function TenantHome() {
                 </p>
                 <button
                   type="button"
+                  disabled={isRestricted}
                   className="pk-book-service-btn"
-                  style={{ background: '#ea580c', maxWidth: '280px' }}
-                  onClick={() => showToast('LifeLine Emergency Desk notified! We are reaching out.')}
+                  style={{
+                    background: isRestricted ? '#94a3b8' : '#ea580c',
+                    maxWidth: '280px',
+                    cursor: isRestricted ? 'not-allowed' : 'pointer',
+                    opacity: isRestricted ? 0.75 : 1
+                  }}
+                  onClick={() => {
+                    if (handleRestrictedAction('LifeLine Emergency Desk')) return;
+                    showToast('LifeLine Emergency Desk notified! We are reaching out.');
+                  }}
                 >
-                  Activate LifeLine Support
+                  {isRestricted ? '🔒 Support Disabled' : 'Activate LifeLine Support'}
                 </button>
               </div>
             </div>
@@ -3004,6 +3309,20 @@ export default function TenantHome() {
               <div>
                 <div className="pk-tag-row">
                   <span className="pk-tag-orange">BudgetKart</span>
+                  {isRestricted && (
+                    <span style={{
+                      background: isBlocked ? '#fee2e2' : '#fef3c7',
+                      color: isBlocked ? '#991b1b' : '#92400e',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      padding: '3px 9px',
+                      borderRadius: '9999px',
+                      border: `1px solid ${isBlocked ? '#fca5a5' : '#fde68a'}`,
+                      marginLeft: '8px'
+                    }}>
+                      {isBlocked ? '⛔ Expenses Blocked' : '⚠️ Expenses Suspended'}
+                    </span>
+                  )}
                 </div>
                 <h2 className="pk-section-title">Smart Rent, Deposit &amp; Utility Tracker</h2>
                 <p className="pk-section-desc">
@@ -3019,6 +3338,32 @@ export default function TenantHome() {
                 <span>← Back to SearchKart Homes</span>
               </button>
             </div>
+
+            {isRestricted && (
+              <div style={{
+                marginBottom: '24px',
+                padding: '16px 20px',
+                borderRadius: '16px',
+                background: isBlocked ? '#fef2f2' : '#fffbeb',
+                border: `2px solid ${isBlocked ? '#ef4444' : '#f59e0b'}`,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '14px',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.06)'
+              }}>
+                <span style={{ fontSize: '28px', lineHeight: 1 }}>{isBlocked ? '⛔' : '⚠️'}</span>
+                <div>
+                  <strong style={{ fontSize: '15px', color: isBlocked ? '#991b1b' : '#92400e', display: 'block' }}>
+                    {isBlocked ? 'BudgetKart Features Permanently Blocked (Strike 2)' : 'BudgetKart Features Suspended (Strike 1)'}
+                  </strong>
+                  <p style={{ margin: '4px 0 0', fontSize: '12px', color: isBlocked ? '#7f1d1d' : '#78350f', lineHeight: 1.5 }}>
+                    {isBlocked
+                      ? 'Expense logging, flatmate split settlements, and HRA receipts are permanently disabled for blocked accounts.'
+                      : 'Expense tracking, receipt downloads, and bill settlements are disabled while your account is suspended. Open NestAI to appeal.'}
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="pk-budget-dashboard-grid">
               {/* Left Column: Monthly Living Budget Box */}
@@ -3066,8 +3411,10 @@ export default function TenantHome() {
                   <form onSubmit={handleQuickAddExpense} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     <input
                       type="text"
-                      placeholder="Expense Name (e.g. Wi-Fi bill, Groceries)"
+                      placeholder={isRestricted ? '🔒 Expense tracking disabled' : 'Expense Name (e.g. Wi-Fi bill, Groceries)'}
                       className="pk-quick-input"
+                      disabled={isRestricted}
+                      style={{ opacity: isRestricted ? 0.6 : 1, cursor: isRestricted ? 'not-allowed' : 'text' }}
                       value={quickLabel}
                       onChange={(e) => setQuickLabel(e.target.value)}
                     />
@@ -3076,12 +3423,23 @@ export default function TenantHome() {
                         type="number"
                         placeholder="Amount (₹)"
                         className="pk-quick-input"
-                        style={{ flex: 1 }}
+                        style={{ flex: 1, opacity: isRestricted ? 0.6 : 1, cursor: isRestricted ? 'not-allowed' : 'text' }}
                         value={quickAmount}
+                        disabled={isRestricted}
                         onChange={(e) => setQuickAmount(e.target.value)}
                       />
-                      <button type="submit" className="pk-quick-add-btn" style={{ padding: '8px 20px' }}>
-                        + Add Expense
+                      <button
+                        type="submit"
+                        disabled={isRestricted}
+                        className="pk-quick-add-btn"
+                        style={{
+                          padding: '8px 20px',
+                          opacity: isRestricted ? 0.6 : 1,
+                          cursor: isRestricted ? 'not-allowed' : 'pointer',
+                          background: isRestricted ? '#64748b' : undefined
+                        }}
+                      >
+                        {isRestricted ? 'Locked' : '+ Add Expense'}
                       </button>
                     </div>
                   </form>
@@ -3104,6 +3462,7 @@ export default function TenantHome() {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
+                      opacity: isRestricted ? 0.75 : 1
                     }}
                   >
                     <div>
@@ -3116,19 +3475,24 @@ export default function TenantHome() {
                     </div>
                     <button
                       type="button"
+                      disabled={isRestricted}
                       style={{
-                        background: '#1E3A8A',
+                        background: isRestricted ? '#94a3b8' : '#1E3A8A',
                         color: '#ffffff',
                         border: 0,
                         borderRadius: '10px',
                         padding: '8px 14px',
                         fontSize: '12px',
                         fontWeight: 700,
-                        cursor: 'pointer',
+                        cursor: isRestricted ? 'not-allowed' : 'pointer',
+                        opacity: isRestricted ? 0.75 : 1
                       }}
-                      onClick={() => showToast('HRA Rent Receipt PDF downloaded successfully!')}
+                      onClick={() => {
+                        if (handleRestrictedAction('HRA Rent Receipt download')) return;
+                        showToast('HRA Rent Receipt PDF downloaded successfully!');
+                      }}
                     >
-                      Download
+                      {isRestricted ? '🔒 Locked' : 'Download'}
                     </button>
                   </div>
 
@@ -3141,6 +3505,7 @@ export default function TenantHome() {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
+                      opacity: isRestricted ? 0.75 : 1
                     }}
                   >
                     <div>
@@ -3153,19 +3518,24 @@ export default function TenantHome() {
                     </div>
                     <button
                       type="button"
+                      disabled={isRestricted}
                       style={{
-                        background: '#14532D',
+                        background: isRestricted ? '#94a3b8' : '#14532D',
                         color: '#ffffff',
                         border: 0,
                         borderRadius: '10px',
                         padding: '8px 14px',
                         fontSize: '12px',
                         fontWeight: 700,
-                        cursor: 'pointer',
+                        cursor: isRestricted ? 'not-allowed' : 'pointer',
+                        opacity: isRestricted ? 0.75 : 1
                       }}
-                      onClick={() => showToast('All flatmate dues are settled for this cycle!')}
+                      onClick={() => {
+                        if (handleRestrictedAction('Flatmate bill split')) return;
+                        showToast('All flatmate dues are settled for this cycle!');
+                      }}
                     >
-                      View Split
+                      {isRestricted ? '🔒 Locked' : 'View Split'}
                     </button>
                   </div>
                 </div>
@@ -3178,15 +3548,17 @@ export default function TenantHome() {
                   {expenseLedger.length > 0 && (
                     <button
                       type="button"
+                      disabled={isRestricted}
                       style={{
                         background: 'transparent',
                         border: 0,
-                        color: '#b91c1c',
+                        color: isRestricted ? '#94a3b8' : '#b91c1c',
                         fontSize: '11.5px',
                         fontWeight: 700,
-                        cursor: 'pointer',
+                        cursor: isRestricted ? 'not-allowed' : 'pointer',
                       }}
                       onClick={() => {
+                        if (handleRestrictedAction('Clearing tracked expenses')) return;
                         setExpenseLedger([]);
                         try {
                           localStorage.setItem('prent_tracked_expenses', JSON.stringify([]));

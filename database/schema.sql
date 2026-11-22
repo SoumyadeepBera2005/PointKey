@@ -13,7 +13,12 @@ CREATE TABLE IF NOT EXISTS users (
     tenant_gender VARCHAR(20) NULL,
     tenant_occupation VARCHAR(50) NULL,
     verification_status ENUM('NOT_SUBMITTED', 'PENDING', 'VERIFIED', 'REJECTED') DEFAULT 'NOT_SUBMITTED',
-    account_status ENUM('ACTIVE', 'BLOCKED', 'DELETED') DEFAULT 'ACTIVE',
+    account_status VARCHAR(30) DEFAULT 'ACTIVE',
+    strike_count INT DEFAULT 0,
+    block_reason VARCHAR(255) NULL,
+    unblock_appeal_status VARCHAR(30) DEFAULT 'NONE',
+    unblock_appeal_text TEXT NULL,
+    unblock_appeal_date DATETIME NULL,
     average_rating DECIMAL(3,2) DEFAULT 0.00,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -173,4 +178,16 @@ CREATE TABLE IF NOT EXISTS admin_audit_log (
     target_id VARCHAR(64) NOT NULL,
     details JSON NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- 11. User Notifications Table (Real-time in-app alerts: Blocks, Strikes, Appeals)
+CREATE TABLE IF NOT EXISTS user_notifications (
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    user_id CHAR(36) NOT NULL,
+    type VARCHAR(50) NOT NULL,
+    title VARCHAR(200) NOT NULL,
+    message TEXT NOT NULL,
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;

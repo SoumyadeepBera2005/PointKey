@@ -11,6 +11,7 @@ export function SocketProvider({ children }) {
   useEffect(() => {
     if (!isAuthed) return undefined;
     const socket = getSocket();
+    if (!socket) return undefined;
     const onConnect = () => setConnected(true);
     const onDisconnect = () => setConnected(false);
     socket.on('connect', onConnect);

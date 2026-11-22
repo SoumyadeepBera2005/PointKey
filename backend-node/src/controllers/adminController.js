@@ -99,7 +99,9 @@ async function listUsers(req, res, next) {
     const where = role && ['TENANT', 'OWNER', 'ADMIN'].includes(role) ? 'WHERE role = ?' : '';
     const params = where ? [role] : [];
     const [rows] = await db.query(
-      `SELECT id, full_name, email, phone, role, verification_status, account_status, average_rating, created_at
+      `SELECT id, full_name, email, phone, role, verification_status, account_status,
+              strike_count, block_reason, unblock_appeal_status, unblock_appeal_text, unblock_appeal_date,
+              average_rating, created_at
        FROM users ${where} ORDER BY created_at DESC LIMIT 500`,
       params
     );
@@ -107,17 +109,198 @@ async function listUsers(req, res, next) {
   } catch (e) { next(e); }
 }
 
-// PATCH /api/v1/admin/users/:id/status  { account_status: ACTIVE|BLOCKED|DELETED }
+/**
+ * নোটিফিকেশন ডিসপ্যাচার ও রিয়েল-টাইম সকেট ইমিটার:
+ * এডমিন কোনো ইউজারকে ব্লক, সাসপেন্ড বা অ্যাপ্রুভ করার সাথে সাথে:
+ * ১. ডাটাবেসে ইউজার নোটিফিকেশন এন্ট্রি সেভ হয়।
+ * ২. Socket.io এর মাধ্যমে ব্যবহারকারীর ডিভাইসে রিয়েল-টাইম নোটিফিকেশন চলে যায়।
+ */
+async function dispatchUserStatusNotification(io, userId, status, strike, reason, type, title, message) {
+  try {
+    const notifId = require('crypto').randomUUID();
+    await db.query(
+      'INSERT INTO user_notifications (id, user_id, type, title, message) VALUES (?, ?, ?, ?, ?)',
+      [notifId, userId, type, title, message]
+    );
+    if (io) {
+      const payload = {
+        userId,
+        account_status: status,
+        strike_count: strike,
+        block_reason: reason,
+        notification: {
+          id: notifId,
+          user_id: userId,
+          type,
+          title,
+          message,
+          is_read: false,
+          created_at: new Date().toISOString(),
+        },
+      };
+      io.to(`user:${userId}`).emit('account_status_changed', payload);
+      io.to(`user:${userId}`).emit('new_notification', payload.notification);
+      io.emit('user_status_sync', payload);
+    }
+  } catch (err) {
+    console.error('[Notification Dispatch Error]:', err.message);
+  }
+}
+
+/**
+ * PATCH /api/v1/admin/users/:id/status
+ * =============================================================================
+ * এডমিন কর্তৃক ম্যানুয়াল ২-স্ট্রাইক ও আপিল ম্যানেজমেন্ট সিস্টেম:
+ * ১. Strike 1 (SUSPENDED): সাময়িক স্থগিতাদেশ। সাথে সাথে নোটিফিকেশন পাঠানো হয়।
+ * ২. Appeal Review (APPROVE/REJECT): ইউজার অঙ্গীকারনামা জমা দিলে এডমিন তা রিভিউ করে
+ *    - অ্যাপ্রুভ করলে অ্যাকাউন্ট পুনরায় ACTIVE হবে এবং নোটিফিকেশন যাবে।
+ *    - রিজেক্ট করলে SUSPENDED থাকবে এবং নোটিফিকেশন যাবে।
+ * ৩. Strike 2 (BLOCKED): দ্বিতীয়বার নিয়ম ভাঙলে স্থায়ীভাবে পার্মানেন্ট ব্লক।
+ * ৪. সম্পূর্ণ ম্যানুয়াল নিয়ন্ত্রণ — এডমিন সম্পূর্ণ বিচার বিবেচনা করে সিদ্ধান্ত নেন।
+ * =============================================================================
+ */
 async function setUserStatus(req, res, next) {
   try {
-    const { account_status } = req.body;
-    if (!['ACTIVE', 'BLOCKED', 'DELETED'].includes(account_status)) return res.status(400).json({ message: 'Invalid account_status' });
-    await db.query('UPDATE users SET account_status = ? WHERE id = ?', [account_status, req.params.id]);
+    const { account_status, reason, strike_count, appeal_decision } = req.body;
+    const validStatuses = ['ACTIVE', 'SUSPENDED', 'BLOCKED', 'DELETED'];
+    const io = req.app?.get('io');
+
+    const [[targetUser]] = await db.query('SELECT * FROM users WHERE id = ?', [req.params.id]);
+    if (!targetUser) return res.status(404).json({ message: 'User not found' });
+    if (targetUser.role === 'ADMIN') return res.status(403).json({ message: 'Cannot modify admin account status' });
+
+    // ১. এডমিন আপিল পর্যালোচনা (Review Unblock Appeal)
+    if (appeal_decision === 'APPROVE') {
+      await db.query(
+        `UPDATE users 
+         SET account_status = 'ACTIVE', 
+             unblock_appeal_status = 'APPROVED'
+         WHERE id = ?`,
+        [req.params.id]
+      );
+      await db.query(
+        "INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details) VALUES (?, 'APPROVE_UNBLOCK_APPEAL', 'USER', ?, ?)",
+        [req.user.id, req.params.id, JSON.stringify({ previous_status: targetUser.account_status, strike_count: targetUser.strike_count })]
+      );
+
+      // তাৎক্ষণিক নোটিফিকেশন ও সকেট ডিসপ্যাচ
+      await dispatchUserStatusNotification(
+        io,
+        req.params.id,
+        'ACTIVE',
+        targetUser.strike_count,
+        null,
+        'APPEAL_APPROVED',
+        '✅ Unblock Appeal Approved',
+        'PointKey Admin has approved your signed rules undertaking. Your account access has been fully restored!'
+      );
+
+      return res.json({ message: 'Appeal approved! User access has been fully restored (Strike 1 remains recorded).' });
+    }
+
+    if (appeal_decision === 'REJECT') {
+      await db.query(
+        `UPDATE users 
+         SET unblock_appeal_status = 'REJECTED' 
+         WHERE id = ?`,
+        [req.params.id]
+      );
+      await db.query(
+        "INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details) VALUES (?, 'REJECT_UNBLOCK_APPEAL', 'USER', ?, ?)",
+        [req.user.id, req.params.id, JSON.stringify({ reason: reason || 'Appeal rejected by admin' })]
+      );
+
+      await dispatchUserStatusNotification(
+        io,
+        req.params.id,
+        'SUSPENDED',
+        targetUser.strike_count,
+        reason,
+        'APPEAL_REJECTED',
+        '❌ Unblock Appeal Rejected',
+        'Your unblock appeal was rejected by Admin. Please submit an updated pledge statement via NestAI.'
+      );
+
+      return res.json({ message: 'Appeal rejected. User remains suspended.' });
+    }
+
+    // ২. এডমিন সরাসরি স্ট্যাটাস বা স্ট্রাইক পরিবর্তন করছেন
+    const nextStatus = account_status ? String(account_status).toUpperCase() : targetUser.account_status;
+    if (!validStatuses.includes(nextStatus)) {
+      return res.status(400).json({ message: 'Invalid account_status. Must be ACTIVE, SUSPENDED, BLOCKED, or DELETED' });
+    }
+
+    let newStrike = strike_count !== undefined ? Number(strike_count) : Number(targetUser.strike_count || 0);
+    let newReason = reason !== undefined ? reason : targetUser.block_reason;
+    let newAppealStatus = targetUser.unblock_appeal_status;
+
+    if (nextStatus === 'SUSPENDED') {
+      newStrike = 1; // Strike 1
+      newAppealStatus = 'NONE';
+      if (!newReason) newReason = 'Rule violation (Strike 1)';
+    } else if (nextStatus === 'BLOCKED') {
+      newStrike = 2; // Strike 2 (Permanent ban)
+      newAppealStatus = 'NONE';
+      if (!newReason) newReason = 'Repeated rule violations (Strike 2)';
+    } else if (nextStatus === 'ACTIVE') {
+      newAppealStatus = 'NONE';
+      if (strike_count !== undefined) {
+        newStrike = Number(strike_count);
+      }
+    }
+
+    await db.query(
+      `UPDATE users 
+       SET account_status = ?, 
+           strike_count = ?, 
+           block_reason = ?, 
+           unblock_appeal_status = ? 
+       WHERE id = ?`,
+      [nextStatus, newStrike, newReason || null, newAppealStatus, req.params.id]
+    );
+
     await db.query(
       "INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details) VALUES (?, ?, 'USER', ?, ?)",
-      [req.user.id, `SET_${account_status}`, req.params.id, JSON.stringify({ account_status })]
+      [req.user.id, `SET_${nextStatus}`, req.params.id, JSON.stringify({ nextStatus, strike_count: newStrike, reason: newReason })]
     );
-    res.json({ message: `User ${account_status.toLowerCase()}` });
+
+    // ব্লক বা সাসপেনশন বা অ্যাক্টিভেশনের সাথে সাথে ইউজারের ডিভাইসে নোটিফিকেশন পাঠানো
+    if (nextStatus === 'BLOCKED') {
+      await dispatchUserStatusNotification(
+        io,
+        req.params.id,
+        'BLOCKED',
+        newStrike,
+        newReason,
+        'ACCOUNT_BLOCKED',
+        '⛔ Account Permanently Blocked (Strike 2)',
+        `Admin has permanently blocked your account for rule violation: "${newReason}". All platform access is terminated.`
+      );
+    } else if (nextStatus === 'SUSPENDED') {
+      await dispatchUserStatusNotification(
+        io,
+        req.params.id,
+        'SUSPENDED',
+        newStrike,
+        newReason,
+        'ACCOUNT_SUSPENDED',
+        '⚠️ Account Suspended by Admin (Strike 1)',
+        `Your account was suspended by Admin for: "${newReason}". View Details and payments are disabled. Open NestAI to appeal.`
+      );
+    } else if (nextStatus === 'ACTIVE') {
+      await dispatchUserStatusNotification(
+        io,
+        req.params.id,
+        'ACTIVE',
+        newStrike,
+        null,
+        'ACCOUNT_RESTORED',
+        '✅ Account Restored to Active',
+        'Admin has restored your account to Active status. All features are now unlocked!'
+      );
+    }
+
+    res.json({ message: `User status updated to ${nextStatus.toLowerCase()}` });
   } catch (e) { next(e); }
 }
 

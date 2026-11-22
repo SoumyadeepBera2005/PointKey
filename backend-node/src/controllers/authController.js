@@ -1,12 +1,25 @@
+/**
+ * =============================================================================
+ * POINTKEY AUTH CONTROLLER (authController.js)
+ * =============================================================================
+ * এই ফাইলে ইউজার অথেনটিকেশন, রেজিস্ট্রেশন (Signup), টু-ফ্যাক্টর ইমেইল ওটিপি (OTP)
+ * ভেরিফিকেশন এবং পাসওয়ার্ড রিসেট সংক্রান্ত সকল ব্যাকএন্ড লজিক রয়েছে।
+ * =============================================================================
+ */
+
 const bcrypt = require('bcryptjs');
 const db = require('../config/db');
 const { signToken } = require('../middlewares/authMiddleware');
 const { cacheGet, cacheSet, cacheDel } = require('../config/redis');
 
+// ওটিপি ভেরিফিকেশনের মেয়াদ (TTL) = ৬০ সেকেন্ড (১ মিনিট)
 const OTP_TTL = 60; // 1 minute
 
-// Normalise Indian mobile numbers to plain 10-digit form so login matches
-// regardless of how the user typed it (+91, spaces, leading 0).
+/**
+ * ভারতীয় ১০-সংখ্যার মোবাইল নম্বর নরমালাইজেশন ফাংশন:
+ * ইউজার যেভাবে টাইপ করুক না কেন (+91 9988..., 09988..., বা 9988...),
+ * এটি অতিরিক্ত স্পেস বা কান্ট্রি কোড মুছে সঠিক ১০ ডিজিট বের করে নেয়।
+ */
 function normalizePhone(raw) {
   let digits = String(raw || '').replace(/\D/g, '');
   if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2);
@@ -14,6 +27,10 @@ function normalizePhone(raw) {
   return digits;
 }
 
+/**
+ * ইমেইল ঠিকানা মাস্কিং ফাংশন (গোপনীয়তা রক্ষার জন্য):
+ * যেমন: soumyadeep... -> so*********@gmail.com
+ */
 function maskEmail(email) {
   const [local, domain] = String(email).split('@');
   if (!domain) return '***';
@@ -21,13 +38,22 @@ function maskEmail(email) {
   return `${head}${'*'.repeat(Math.max(local.length - head.length, 1))}@${domain}`;
 }
 
+/**
+ * ৬-সংখ্যার র‍্যান্ডম ওটিপি (One-Time Password) জেনারেটর
+ */
 function generateOtp() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-// Email delivery via Gmail (or custom SMTP) via EMAIL_SMTP_USER + EMAIL_SMTP_APP_PASSWORD
-// or HTTP mail API via EMAIL_PROVIDER_URL + EMAIL_PROVIDER_KEY.
-// Secret OTP codes are NEVER logged in console or sent to client responses.
+/**
+ * ইমেইলে ওটিপি প্রেরণের কেন্দ্রীয় ফাংশন:
+ * -------------------------------------------------------------
+ * ১. Brevo HTTPS REST API (Port 443):
+ *    - রেন্ডার ক্লাউডের ফ্রি টায়ারে সাধারণ SMTP পোর্ট (25, 465, 587) ব্লক থাকে।
+ *    - তাই Brevo REST API ব্যবহার করা হয়েছে যা পোর্ট ৪৪৩ দিয়ে যেকোনো ইমেইলে
+ *      (Gmail, Yahoo, Outlook) শতভাগ সফলভাবে ওটিপি পৌঁছে দেয়।
+ * ২. Fallback হিসেবে Nodemailer Gmail SMTP রাখা হয়েছে (লোকাল ডেভেলপমেন্টের জন্য)।
+ */
 async function deliverEmailOtp(email, code) {
   const subject = 'Your PointKey Verification Code';
   const textMessage = `Your PointKey verification code is ${code}. It expires in 1 minute. Do not share it with anyone.`;
@@ -181,17 +207,42 @@ async function deliverEmailOtp(email, code) {
   console.warn(`[EMAIL OTP] Notice: EMAIL_SMTP_USER or EMAIL_SMTP_APP_PASSWORD not set in .env. Real email could not be dispatched.`);
 }
 
+/**
+ * ক্লায়েন্টে নিরাপদে প্রেরণের জন্য ইউজারের পাবলিক প্রোফাইল অবজেক্ট তৈরি:
+ * এতে স্ট্রাইক কাউন্ট (strike_count), সাসপেনশনের কারণ (block_reason)
+ * এবং আনব্লক আপিলের স্ট্যাটাস ও স্টেটমেন্ট ফিল্ড অন্তর্ভুক্ত করা হয়েছে।
+ */
 function publicUser(u) {
   return {
-    id: u.id, full_name: u.full_name, email: u.email, phone: u.phone,
-    whatsapp_number: u.whatsapp_number, role: u.role,
-    tenant_gender: u.tenant_gender, tenant_occupation: u.tenant_occupation,
-    verification_status: u.verification_status, account_status: u.account_status,
+    id: u.id,
+    full_name: u.full_name,
+    email: u.email,
+    phone: u.phone,
+    whatsapp_number: u.whatsapp_number,
+    role: u.role,
+    tenant_gender: u.tenant_gender,
+    tenant_occupation: u.tenant_occupation,
+    verification_status: u.verification_status,
+    account_status: u.account_status,
+    strike_count: Number(u.strike_count || 0),
+    block_reason: u.block_reason || null,
+    unblock_appeal_status: u.unblock_appeal_status || 'NONE',
+    unblock_appeal_text: u.unblock_appeal_text || null,
+    unblock_appeal_date: u.unblock_appeal_date || null,
     average_rating: Number(u.average_rating || 0),
   };
 }
 
-// POST /api/v1/auth/signup  { full_name, email, phone, password, role, tenant_gender?, tenant_occupation? }
+/**
+ * =============================================================================
+ * POST /api/v1/auth/signup
+ * =============================================================================
+ * নতুন ইউজার রেজিস্ট্রেশন:
+ * - নাম, ইমেইল, মোবাইল ও পাসওয়ার্ড যাচাই করা।
+ * - পাসওয়ার্ড bcrypt দিয়ে হ্যাশ করে নিরাপদে রাখা।
+ * - safeGender & safeOcc: MySQL ডাটাবেসে জেন্ডার ও অকুপেশন যাতে সঠিকভাবে ঢোকে
+ *   এবং 'Data truncated' এরর না আসে তার সুরক্ষা ব্যবস্থা।
+ */
 async function signup(req, res, next) {
   try {
     const { full_name, email, phone, password, role = 'TENANT', tenant_gender, tenant_occupation, whatsapp_number } = req.body;
@@ -218,6 +269,7 @@ async function signup(req, res, next) {
     if (pairHits.length) return res.status(409).json({ message: `A ${r.toLowerCase()} account already exists for this phone number` });
 
     const hash = await bcrypt.hash(String(password), 10);
+    // safeGender ও safeOcc: 'FREELANCER', 'OTHER', 'STUDENT' ইত্যাদি সকল অকুপেশন সেভ করার সুরক্ষা
     const safeGender = tenant_gender ? String(tenant_gender).trim().toUpperCase() : null;
     const safeOcc = tenant_occupation ? String(tenant_occupation).trim() : null;
     const [{ insertId }] = await db.query(
@@ -230,10 +282,15 @@ async function signup(req, res, next) {
   } catch (e) { next(e); }
 }
 
-// POST /api/v1/auth/login  { email, phone, password, role? }
-// Step 1 of 2: validates the email ↔ mobile pair (they must belong to the same
-// account) and the password — then sends a 6-digit OTP to the account's email.
-// The caller must finish with POST /auth/verify-login-otp to get a token.
+/**
+ * =============================================================================
+ * POST /api/v1/auth/login (ধাপ ১)
+ * =============================================================================
+ * ১. ইউজার যে ইমেইল ও মোবাইল নম্বর দিয়েছে, তা একই অ্যাকাউন্টের কি না যাচাই করে।
+ * ২. পাসওয়ার্ড যাচাই করে।
+ * ৩. পাসওয়ার্ড সঠিক হলে অ্যাকাউন্টের আসল ইমেইলে ৬-ডিজিটের ওটিপি পাঠায় (Brevo দিয়ে)।
+ * ৪. ক্যাশ বা রেডিসে ওটিপি ৬০ সেকেন্ডের জন্য সংরক্ষণ করে।
+ */
 async function login(req, res, next) {
   try {
     const { email, phone, password, role } = req.body;
@@ -282,8 +339,14 @@ async function login(req, res, next) {
   } catch (e) { next(e); }
 }
 
-// POST /api/v1/auth/verify-login-otp  { email, code, role? }
-// Step 2 of 2: verifies the email OTP and returns the JWT.
+/**
+ * =============================================================================
+ * POST /api/v1/auth/verify-login-otp (ধাপ ২)
+ * =============================================================================
+ * ১. ইউজার ফর্ম থেকে যে ৬ ডিজিটের কোড পাঠিয়েছে, তা ক্যাশে থাকা ওটিপির সাথে মিলিয়ে দেখে।
+ * ২. ওটিপি সঠিক ও মেয়াদ (৬০ সেকেন্ডের) মধ্যে থাকলে তা ব্যবহার হয়ে যাওয়ার পর ক্যাশ থেকে মুছে দেয়।
+ * ৩. ইউজারের জন্য সিকিউর JWT টোকেন ইস্যু করে যাতে ইউজার সরাসরি প্ল্যাটফর্মে লগইন করতে পারে।
+ */
 async function verifyLoginOtp(req, res, next) {
   try {
     const { email, code, role } = req.body;
@@ -458,4 +521,146 @@ async function updateProfile(req, res, next) {
   } catch (e) { next(e); }
 }
 
-module.exports = { signup, login, verifyLoginOtp, forgotPassword, resetPassword, adminLogin, sendOtp, verifyOtp, me, updateProfile };
+/**
+ * =============================================================================
+ * POST /api/v1/auth/unblock-appeal
+ * =============================================================================
+ * রুলস ভায়োলেশনে সাসপেন্ডেড ইউজারের আনব্লক আপিল আবেদন (Strike 1 Reinstatement):
+ * - ইউজার চ্যাটবটে রুলস অ্যান্ড রেগুলেশন অঙ্গীকারপত্রে সম্মতি দিলে এই এন্ডপয়েন্টে
+ *   রিকোয়েস্ট আসে।
+ * - স্ট্রাইক ২ (পার্মানেন্ট ব্লক) ইউজারদের আপিল করার কোনো সুযোগ নেই।
+ * - শুধুমাত্র প্রথম স্ট্রাইকে সাসপেন্ডেড থাকা ইউজার একবার অঙ্গীকারনামা দিয়ে
+ *   এডমিনের কাছে রিভিউর জন্য পাঠাতে পারবে।
+ * - এডমিন ম্যানুয়ালি যাচাই করে অ্যাপ্রুভ করলে তবেই এক্সেস ফিরবে।
+ * =============================================================================
+ */
+async function submitUnblockAppeal(req, res, next) {
+  try {
+    const { statement } = req.body;
+    const [[user]] = await db.query('SELECT * FROM users WHERE id = ?', [req.user.id]);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    // স্ট্রাইক ২ ভায়োলেশনে পার্মানেন্ট ব্যান — কোনো আপিল গ্রহণযোগ্য নয়
+    if (Number(user.strike_count || 0) >= 2 || user.account_status === 'BLOCKED') {
+      return res.status(403).json({
+        message: 'Your account is permanently blocked due to repeated rule violations (Strike 2). Appeals are not permitted under PointKey safety policy.',
+      });
+    }
+
+    // শুধুমাত্র সাসপেন্ডেড থাকা ইউজারই আপিল করতে পারে
+    if (user.account_status !== 'SUSPENDED') {
+      return res.status(400).json({
+        message: 'Only suspended accounts (Strike 1) can submit an unblock appeal application.',
+      });
+    }
+
+    const appealStatement = String(statement || '').trim() ||
+      'I have read and solemnly pledge to abide by all PointKey platform rules and regulations. I will not engage in off-platform deals or fraudulent actions. I understand that any subsequent violation will permanently terminate my account with Strike 2.';
+
+    await db.query(
+      `UPDATE users 
+       SET unblock_appeal_status = 'SUBMITTED', 
+           unblock_appeal_text = ?, 
+           unblock_appeal_date = NOW() 
+       WHERE id = ?`,
+      [appealStatement, req.user.id]
+    );
+
+    // এডমিন অডিট লগে রেকর্ড রাখা
+    try {
+      await db.query(
+        "INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details) VALUES (?, 'UNBLOCK_APPEAL_SUBMITTED', 'USER', ?, ?)",
+        [req.user.id, req.user.id, JSON.stringify({ statement: appealStatement })]
+      );
+    } catch {
+      // audit log fail shouldn't break the user appeal
+    }
+
+    const [[updated]] = await db.query('SELECT * FROM users WHERE id = ?', [req.user.id]);
+    return res.json({
+      message: 'Unblock appeal submitted successfully. PointKey Admin will manually review your application.',
+      user: publicUser(updated),
+    });
+  } catch (e) {
+    next(e);
+  }
+}
+
+/**
+ * =============================================================================
+ * GET /api/v1/auth/notifications
+ * =============================================================================
+ * ইউজারের ইন-অ্যাপ নোটিফিকেশন ফেচ করা (যেমন অ্যাকাউন্ট সাসপেনশন, ব্লক, আপিল স্ট্যাটাস):
+ * ডাটাবেস থেকে ইউজারের সব নোটিফিকেশন এবং unread_count রিটার্ন করে।
+ * =============================================================================
+ */
+async function getNotifications(req, res, next) {
+  try {
+    const [rows] = await db.query(
+      'SELECT id, type, title, message, is_read, created_at FROM user_notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 50',
+      [req.user.id]
+    );
+
+    // সেফটি চেক: ডাটাবেসে ইউজার যদি বর্তমানে SUSPENDED বা BLOCKED থাকে কিন্তু নোটিফিকেশন মিসিং থাকে,
+    // তবে নিশ্চিতভাবে তাৎক্ষণিক একটি নোটিফিকেশন তৈরি করে যোগ করা হবে।
+    const [[u]] = await db.query('SELECT account_status, strike_count, block_reason FROM users WHERE id = ?', [req.user.id]);
+    if (u && (u.account_status === 'SUSPENDED' || u.account_status === 'BLOCKED')) {
+      const isBlocked = u.account_status === 'BLOCKED';
+      const expectedType = isBlocked ? 'ACCOUNT_BLOCKED' : 'ACCOUNT_SUSPENDED';
+      const exists = rows.some((r) => r.type === expectedType);
+      if (!exists) {
+        const notifId = require('crypto').randomUUID();
+        const title = isBlocked ? '⛔ Account Permanently Blocked (Strike 2)' : '⚠️ Account Suspended by Admin (Strike 1)';
+        const msg = isBlocked
+          ? `Your account has been permanently blocked by Admin: "${u.block_reason || 'Repeated rule violations'}". All listing access and payments are permanently disabled.`
+          : `Your account is suspended by Admin for: "${u.block_reason || 'Rule violation'}". View Details and payments are disabled. Open NestAI to submit an appeal.`;
+        
+        await db.query(
+          'INSERT INTO user_notifications (id, user_id, type, title, message) VALUES (?, ?, ?, ?, ?)',
+          [notifId, req.user.id, expectedType, title, msg]
+        );
+        rows.unshift({ id: notifId, type: expectedType, title, message: msg, is_read: false, created_at: new Date() });
+      }
+    }
+
+    const unreadCount = rows.filter((r) => !r.is_read).length;
+    res.json({
+      notifications: rows,
+      unread_count: unreadCount,
+      account_status: u?.account_status || 'ACTIVE',
+      strike_count: u?.strike_count || 0,
+      block_reason: u?.block_reason || null,
+    });
+  } catch (e) {
+    next(e);
+  }
+}
+
+/**
+ * PATCH /api/v1/auth/notifications/read-all
+ * সব নোটিফিকেশন রিড হিসেবে মার্ক করা
+ */
+async function markNotificationsRead(req, res, next) {
+  try {
+    await db.query('UPDATE user_notifications SET is_read = TRUE WHERE user_id = ?', [req.user.id]);
+    res.json({ message: 'All notifications marked as read' });
+  } catch (e) {
+    next(e);
+  }
+}
+
+module.exports = {
+  signup,
+  login,
+  verifyLoginOtp,
+  forgotPassword,
+  resetPassword,
+  adminLogin,
+  sendOtp,
+  verifyOtp,
+  me,
+  updateProfile,
+  submitUnblockAppeal,
+  getNotifications,
+  markNotificationsRead,
+};

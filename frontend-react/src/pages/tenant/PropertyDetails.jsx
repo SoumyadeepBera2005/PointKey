@@ -12,10 +12,15 @@ import Skeleton from '../../components/ui/Skeleton';
 import api from '../../services/api';
 import { formatINR } from '../../utils/currencyFormatter';
 import { SAMPLE_PROPERTIES } from '../../data/sampleProperties';
+import { useAuth } from '../../context/AuthContext';
 
 export default function PropertyDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isSuspended = user?.account_status === 'SUSPENDED';
+  const isBlocked = user?.account_status === 'BLOCKED';
+
   const [property, setProperty] = useState(null);
   const [unlocked, setUnlocked] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -201,6 +206,22 @@ export default function PropertyDetails() {
   return (
     <div className="min-h-screen bg-surface pb-24 md:pb-0">
       <Navbar />
+      {isSuspended && (
+        <div className="mx-auto max-w-6xl px-4 pt-4">
+          <div className="rounded-2xl border-2 border-amber-400 bg-amber-50 p-4 text-xs text-amber-950">
+            <p className="font-bold text-sm text-amber-900">⚠️ Account Suspended by Admin (Strike 1 of 2)</p>
+            <p className="mt-1">Reason: {user?.block_reason || 'PointKey platform rules violation'}. Advance payment and visit booking are restricted. Please submit an unblock appeal via NestAI chatbot.</p>
+          </div>
+        </div>
+      )}
+      {isBlocked && (
+        <div className="mx-auto max-w-6xl px-4 pt-4">
+          <div className="rounded-2xl border-2 border-rose-500 bg-rose-50 p-4 text-xs text-rose-950">
+            <p className="font-bold text-sm text-rose-900">⛔ Account Permanently Blocked (Strike 2)</p>
+            <p className="mt-1">Reason: {user?.block_reason || 'Repeated rule violations'}. All platform interactions are permanently terminated.</p>
+          </div>
+        </div>
+      )}
       <main className="mx-auto max-w-6xl gap-6 px-4 py-5 lg:grid lg:grid-cols-5">
         {/* Left column — gallery + details */}
         <div className="space-y-5 lg:col-span-3">

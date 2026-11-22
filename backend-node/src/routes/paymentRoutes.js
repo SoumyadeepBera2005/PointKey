@@ -1,11 +1,12 @@
 const express = require('express');
-const { authMiddleware } = require('../middlewares/authMiddleware');
+const { authMiddleware, requireActiveAccount } = require('../middlewares/authMiddleware');
 const {
   checkout, verify, webhook, myRefunds, requestRefund, receipts,
 } = require('../controllers/paymentController');
 
 const router = express.Router();
-router.post('/checkout', authMiddleware, checkout);
+// পেমেন্ট চেকআউট করার আগে ইউজার এক্টিভ কিনা যাচাই করা হয় (সাসপেন্ডেড হলে পেমেন্ট বন্ধ থাকবে)
+router.post('/checkout', authMiddleware, requireActiveAccount, checkout);
 router.post('/verify', authMiddleware, verify);
 router.post('/webhook', webhook); // signature-verified internally
 router.get('/my-refunds', authMiddleware, myRefunds);

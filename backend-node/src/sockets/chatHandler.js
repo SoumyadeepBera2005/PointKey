@@ -21,6 +21,9 @@ function registerChatHandler(io) {
 
   io.on('connection', (socket) => {
     const userId = socket.user.id;
+    // প্রতিটি কানেক্টেড ইউজারকে তার নিজস্ব রুম `user:<id>`-তে জয়েন করানো হয়
+    socket.join(`user:${userId}`);
+    console.log(`[Socket] User ${userId} connected and joined room user:${userId}`);
 
     socket.on('join:property', async ({ propertyId }) => {
       // Only the property owner or an interested tenant may join

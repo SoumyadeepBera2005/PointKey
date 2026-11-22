@@ -1,17 +1,37 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { MapPin, ShieldCheck, Utensils, Bath } from 'lucide-react';
 import { formatINR } from '../../utils/currencyFormatter';
 import RatingStars from '../ui/RatingStars';
 import Badge from '../ui/Badge';
+import { useAuth } from '../../context/AuthContext';
 
 const COVER_FALLBACK = 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800';
 
 export default function PropertyCard({ property }) {
   const p = property;
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  const handleClick = (e) => {
+    if (user?.account_status === 'SUSPENDED') {
+      e.preventDefault();
+      alert('⚠️ Your account is suspended for rule violation (Strike 1). You cannot view property details. Open the NestAI chatbot to appeal.');
+      return;
+    }
+    if (user?.account_status === 'BLOCKED') {
+      e.preventDefault();
+      alert('⛔ Your account is permanently blocked (Strike 2) due to repeated rule violations.');
+      return;
+    }
+  };
+
   return (
     <Link
       to={`/tenant/property/${p.id}`}
-      className="group glass-card overflow-hidden transition-all duration-300 ease-out hover:-translate-y-1.5 hover:border-forest hover:shadow-xl bg-beige"
+      onClick={handleClick}
+      className={`group glass-card overflow-hidden transition-all duration-300 ease-out hover:-translate-y-1.5 hover:border-forest hover:shadow-xl bg-beige ${
+        user?.account_status === 'SUSPENDED' || user?.account_status === 'BLOCKED' ? 'opacity-80' : ''
+      }`}
     >
       <div className="relative h-44 overflow-hidden bg-slate-200">
         <img

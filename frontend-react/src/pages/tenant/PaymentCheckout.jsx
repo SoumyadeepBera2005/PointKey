@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { CreditCard, Smartphone, Landmark, Wallet, ShieldCheck, Loader2 } from 'lucide-react';
+import { CreditCard, Smartphone, Landmark, Wallet, ShieldCheck, Loader2, AlertTriangle, Ban } from 'lucide-react';
 import Navbar from '../../components/common/Navbar';
 import Button from '../../components/ui/Button';
 import Toast from '../../components/common/Toast';
 import api from '../../services/api';
 import { formatINR } from '../../utils/currencyFormatter';
 import { SAMPLE_PROPERTIES } from '../../data/sampleProperties';
+import { useAuth } from '../../context/AuthContext';
 
 const METHODS = [
   { id: 'UPI', label: 'UPI', icon: Smartphone },
@@ -29,6 +30,10 @@ function loadRazorpayScript() {
 export default function PaymentCheckout() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isSuspended = user?.account_status === 'SUSPENDED';
+  const isBlocked = user?.account_status === 'BLOCKED';
+
   const [property, setProperty] = useState(null);
   const [method, setMethod] = useState('UPI');
   const [busy, setBusy] = useState(false);
@@ -77,6 +82,14 @@ export default function PaymentCheckout() {
   };
 
   const pay = async () => {
+    if (isSuspended) {
+      setToast({ type: 'error', message: '⚠️ Payments are disabled: Your account is suspended for rule violations (Strike 1). Appeal via chatbot.' });
+      return;
+    }
+    if (isBlocked) {
+      setToast({ type: 'error', message: '⛔ Account permanently blocked (Strike 2). Payments are forbidden.' });
+      return;
+    }
     setBusy(true);
     try {
       let order;
@@ -140,19 +153,39 @@ export default function PaymentCheckout() {
               </div>
             </div>
           )}
+          {isSuspended && (
+            <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-amber-300 bg-amber-50 p-3.5 text-xs text-amber-900">
+              <AlertTriangle size={18} className="shrink-0 text-amber-600 mt-0.5" />
+              <div>
+                <strong className="block font-bold">Payment Option Disabled (Strike 1)</strong>
+                <span>Your account is currently suspended for a rule violation: &quot;{user.block_reason || 'Community rules breach'}&quot;. Please open the NestAI chatbot to sign the rules agreement and submit an unblock appeal.</span>
+              </div>
+            </div>
+          )}
+
+          {isBlocked && (
+            <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-rose-300 bg-rose-50 p-3.5 text-xs text-rose-900">
+              <Ban size={18} className="shrink-0 text-rose-600 mt-0.5" />
+              <div>
+                <strong className="block font-bold">Account Permanently Blocked (Strike 2)</strong>
+                <span>Multiple rule violations detected. You cannot make payments on PointKey.</span>
+              </div>
+            </div>
+          )}
+
           <p className="mt-4 rounded-xl bg-emerald-50 px-4 py-2.5 text-center text-[11px] font-semibold text-emerald-800">
             “If your room is not confirmed, 100% of the money is refundable.”
           </p>
           <div className="mt-4 space-y-2">
             {METHODS.map(({ id: mid, label, icon: Icon }) => (
-              <button key={mid} onClick={() => setMethod(mid)} role="radio" aria-checked={method === mid} className={`flex w-full items-center gap-3 rounded-2xl border p-3.5 text-left text-sm font-semibold transition ${method === mid ? 'border-trust bg-emerald-50/50 text-trust shadow-md' : 'border-slate-200 text-slate-600 hover:border-emerald-300'}`}>
+              <button key={mid} onClick={() => setMethod(mid)} disabled={isSuspended || isBlocked} role="radio" aria-checked={method === mid} className={`flex w-full items-center gap-3 rounded-2xl border p-3.5 text-left text-sm font-semibold transition ${method === mid ? 'border-trust bg-emerald-50/50 text-trust shadow-md' : 'border-slate-200 text-slate-600 hover:border-emerald-300'} ${isSuspended || isBlocked ? 'opacity-50 cursor-not-allowed' : ''}`}>
                 <Icon size={20} /> {label}
                 <span className={`ml-auto h-4 w-4 rounded-full border-2 ${method === mid ? 'border-trust bg-trust' : 'border-slate-300'}`} />
               </button>
             ))}
           </div>
-          <Button className="mt-5 w-full" onClick={pay} disabled={busy}>
-            {busy ? <Loader2 className="animate-spin" size={18} /> : <>Pay {property ? formatINR(property.advance_amount) : ''} &amp; Unlock</>}
+          <Button className={`mt-5 w-full ${isSuspended || isBlocked ? '!bg-slate-400 !cursor-not-allowed hover:!bg-slate-400' : ''}`} onClick={pay} disabled={busy || isSuspended || isBlocked}>
+            {busy ? <Loader2 className="animate-spin" size={18} /> : isSuspended ? 'Payment Disabled (Account Suspended)' : isBlocked ? 'Permanently Blocked' : <>Pay {property ? formatINR(property.advance_amount) : ''} &amp; Unlock</>}
           </Button>
           <p className="mt-2 text-center text-[10px] text-slate-400">Payments processed securely by Razorpay. Never share your OTP/PIN.</p>
         </div>

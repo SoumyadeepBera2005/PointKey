@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { SAMPLE_PROPERTIES } from '../../data/sampleProperties';
@@ -25,6 +25,21 @@ const POPULAR_LOCATIONS = [
   { name: 'Hyderabad, Telangana', desc: 'HITEC City & Gachibowli residences' },
   { name: 'Pune, Maharashtra', desc: 'Viman Nagar, Hinjewadi & Kharadi' },
 ];
+
+/**
+ * =============================================================================
+ * TENANT-SPECIFIC RECENT LOCATIONS HELPER
+ * =============================================================================
+ * প্রতিটি টেন্যান্টের জন্য আলাদা localStorage Key তৈরি করে (যেমন: prent_recent_locations_USER123)।
+ * এর ফলে:
+ * ১. এক টেন্যান্টের সার্চ হিস্ট্রি অন্য টেন্যান্ট দেখতে পাবে না।
+ * ২. লগইন ছাড়া ভিজিটরদের জন্য 'prent_recent_locations_guest' ব্যবহার হয়।
+ * =============================================================================
+ */
+function getRecentLocationsStorageKey(currentUser) {
+  const uid = currentUser?.id || (currentUser?.email ? currentUser.email.toLowerCase().trim() : null);
+  return uid ? `prent_recent_locations_${uid}` : 'prent_recent_locations_guest';
+}
 
 export default function Navbar({ onSelectLocation, onOpenServices, onOpenExpenses, activePillar = 'SearchKart', onSwitchPillar, transparent = false }) {
   const { user, logout } = useAuth();
@@ -57,19 +72,57 @@ export default function Navbar({ onSelectLocation, onOpenServices, onOpenExpense
               if (onSelectLocation) onSelectLocation(loc);
             }
           })
-          .catch(() => {});
+          .catch(() => { });
       }
-    } catch {}
+    } catch { }
   }, [onSelectLocation]);
   const [isLocating, setIsLocating] = useState(false);
+  // ===========================================================================
+  // PREVIOUS SEARCHES STATE (টেন্যান্ট অনুযায়ী বিগত সার্চ হিস্ট্রি)
+  // ১. কোনো হার্ডকোডেড ডিফল্ট শহর রাখা হয়নি; নতুন ইউজার আসলে খালি থাকবে।
+  // ২. একবার ক্লিয়ার (Clear) করলে পেজ রিলোড দিলেও আর ফিরে আসবে না।
+  // ===========================================================================
   const [recentLocations, setRecentLocations] = useState(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem('prent_recent_locations') || '[]');
-      return saved.length > 0 ? saved : ['Purba Medinipur, West Bengal', 'Salt Lake, Kolkata', 'New Town, Kolkata'];
+      // পুরনো গ্লোবাল ডামি ডেটা (Purba Medinipur ইত্যাদি) ব্রাউজারে থাকলে তা রিমুভ করা
+      const oldLegacy = localStorage.getItem('prent_recent_locations');
+      if (oldLegacy) {
+        try {
+          const parsed = JSON.parse(oldLegacy);
+          if (Array.isArray(parsed) && parsed.includes('Purba Medinipur, West Bengal') && parsed.length === 3) {
+            localStorage.removeItem('prent_recent_locations');
+          }
+        } catch { }
+      }
+
+      // বর্তমান ইউজারের নির্দিষ্ট কী থেকে সার্চ হিস্ট্রি লোড করা
+      const key = getRecentLocationsStorageKey(user);
+      const saved = localStorage.getItem(key);
+      if (saved !== null) {
+        const parsed = JSON.parse(saved);
+        return Array.isArray(parsed) ? parsed : [];
+      }
+      return [];
     } catch {
-      return ['Purba Medinipur, West Bengal', 'Salt Lake, Kolkata', 'New Town, Kolkata'];
+      return [];
     }
   });
+
+  // ইউজার লগইন করলে বা অ্যাকাউন্ট সুইচ করলে স্বয়ংক্রিয়ভাবে সেই ইউজারের হিস্ট্রি লোড হবে
+  useEffect(() => {
+    try {
+      const key = getRecentLocationsStorageKey(user);
+      const saved = localStorage.getItem(key);
+      if (saved !== null) {
+        const parsed = JSON.parse(saved);
+        setRecentLocations(Array.isArray(parsed) ? parsed : []);
+      } else {
+        setRecentLocations([]);
+      }
+    } catch {
+      setRecentLocations([]);
+    }
+  }, [user?.id, user?.email]);
   const [favOpen, setFavOpen] = useState(false);
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -77,10 +130,59 @@ export default function Navbar({ onSelectLocation, onOpenServices, onOpenExpense
   const [favoritesCount, setFavoritesCount] = useState(0);
   const [favoriteItems, setFavoriteItems] = useState([]);
 
+  // রিয়েল-টাইম নোটিফিকেশন স্টেট
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+
   const locationRef = useRef(null);
   const favRef = useRef(null);
   const notifyRef = useRef(null);
   const profileRef = useRef(null);
+
+  // নোটিফিকেশন ফেচ করা
+  const loadNotifications = useCallback(async () => {
+    const token = localStorage.getItem('prent_token');
+    if (!token) {
+      setNotifications([]);
+      setUnreadCount(0);
+      return;
+    }
+    try {
+      const { data } = await api.get('/auth/notifications');
+      if (data?.notifications) {
+        setNotifications(data.notifications);
+        setUnreadCount(data.unread_count || 0);
+      }
+    } catch {
+      // fallback
+    }
+  }, []);
+
+  // নোটিফিকেশন পোলিং ও সকেট ইভেন্ট রিসিভ
+  useEffect(() => {
+    loadNotifications();
+    const interval = setInterval(loadNotifications, 6000);
+    const handleNewNotif = () => {
+      loadNotifications();
+    };
+    window.addEventListener('prent_new_notification', handleNewNotif);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('prent_new_notification', handleNewNotif);
+    };
+  }, [loadNotifications]);
+
+  const handleToggleNotify = async () => {
+    const nextState = !notifyOpen;
+    setNotifyOpen(nextState);
+    if (nextState && unreadCount > 0) {
+      try {
+        await api.patch('/auth/notifications/read-all');
+        setUnreadCount(0);
+        setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+      } catch {}
+    }
+  };
 
   // Sync favorites count and list from localStorage
   useEffect(() => {
@@ -181,6 +283,12 @@ export default function Navbar({ onSelectLocation, onOpenServices, onOpenExpense
       l.desc.toLowerCase().includes(locationQuery.toLowerCase())
   );
 
+  /**
+   * যখন কোনো ইউজার কোনো লোকেশন বেছে নেন (সার্চ ড্রপডাউন, পপুলার শহর বা এন্টার চেপে):
+   * ১. সিলেক্টেড নাম হেডারে দেখায়।
+   * ২. সেই ইউজারের পারসোনাল রিসেন্ট সার্চ লিস্টের শুরুতে যোগ হয় (ডুপ্লিকেট রিমুভ করে)।
+   * ৩. ইউজারের নিজস্ব localStorage কি-তে সেভ করা হয়।
+   */
   const handleLocationPick = (loc) => {
     setLocationOpen(false);
     const locName = typeof loc === 'object' ? loc.name : loc;
@@ -189,13 +297,14 @@ export default function Navbar({ onSelectLocation, onOpenServices, onOpenExpense
     setSelectedLocationName(cleanName);
     try {
       localStorage.setItem('prent_selected_location', cleanName);
-    } catch {}
+    } catch { }
 
     try {
-      const updated = [locName, ...recentLocations.filter((r) => r !== locName)].slice(0, 5);
+      const updated = [locName, ...recentLocations.filter((r) => r.toLowerCase() !== locName.toLowerCase())].slice(0, 6);
       setRecentLocations(updated);
-      localStorage.setItem('prent_recent_locations', JSON.stringify(updated));
-    } catch {}
+      const key = getRecentLocationsStorageKey(user);
+      localStorage.setItem(key, JSON.stringify(updated));
+    } catch { }
 
     if (onSelectLocation) onSelectLocation(cleanName);
     else navigate(`/tenant/search?location=${encodeURIComponent(cleanName)}`);
@@ -286,7 +395,7 @@ export default function Navbar({ onSelectLocation, onOpenServices, onOpenExpense
             return;
           }
         }
-      } catch {}
+      } catch { }
       handleLocationPick({ name: 'Kolkata, West Bengal', desc: 'Default Metro' });
     };
 
@@ -319,12 +428,27 @@ export default function Navbar({ onSelectLocation, onOpenServices, onOpenExpense
     );
   };
 
+  // 'Clear' বাটনে ক্লিক করলে সমস্ত প্রিভিয়াস সার্চ মুছে যাবে এবং localStorage-এ [] সেভ হবে
+  // ফলে পেজ রিলোড করলেও পুরনো ডেটা আর ফিরে আসবে না
   const clearRecentLocations = (e) => {
     e.stopPropagation();
     setRecentLocations([]);
     try {
+      const key = getRecentLocationsStorageKey(user);
+      localStorage.setItem(key, JSON.stringify([]));
       localStorage.removeItem('prent_recent_locations');
-    } catch {}
+    } catch { }
+  };
+
+  // নির্দিষ্ট কোনো একটি রিসেন্ট সার্চ ট্যাগের '✕' বাটনে ক্লিক করলে শুধু সেটি মুছে যাবে
+  const removeSingleRecentLocation = (e, locToRemove) => {
+    e.stopPropagation();
+    const updated = recentLocations.filter((r) => r.toLowerCase() !== locToRemove.toLowerCase());
+    setRecentLocations(updated);
+    try {
+      const key = getRecentLocationsStorageKey(user);
+      localStorage.setItem(key, JSON.stringify(updated));
+    } catch { }
   };
 
   const initialLetter = (user?.full_name || 'Tenant').charAt(0).toUpperCase();
@@ -890,6 +1014,24 @@ export default function Navbar({ onSelectLocation, onOpenServices, onOpenExpense
           color: #14532D;
         }
 
+        .pk-loc-recent-del {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 16px;
+          height: 16px;
+          border-radius: 50%;
+          font-size: 9px;
+          color: #6b7280;
+          margin-left: 4px;
+          transition: background 0.15s, color 0.15s;
+        }
+
+        .pk-loc-recent-del:hover {
+          background: #fee2e2;
+          color: #dc2626;
+        }
+
         /* 3. POPULAR CITIES LIST */
         .pk-location-list {
           margin-top: 6px;
@@ -1012,6 +1154,21 @@ export default function Navbar({ onSelectLocation, onOpenServices, onOpenExpense
           display: grid;
           place-items: center;
           border: 2px solid #ffffff;
+        }
+
+        .pk-badge-count.is-alert {
+          background: #dc2626 !important;
+          color: #ffffff !important;
+          animation: pk-pulse 1.4s infinite ease-in-out !important;
+        }
+
+        @keyframes pk-pulse {
+          0%, 100% {
+            transform: scale(1);
+          }
+          50% {
+            transform: scale(1.22);
+          }
         }
 
         .pk-avatar-btn {
@@ -1504,6 +1661,11 @@ export default function Navbar({ onSelectLocation, onOpenServices, onOpenExpense
                   autoFocus
                   value={locationQuery}
                   onChange={(e) => setLocationQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && locationQuery.trim()) {
+                      handleLocationPick(locationQuery.trim());
+                    }
+                  }}
                 />
                 {locationQuery && (
                   <button
@@ -1580,6 +1742,13 @@ export default function Navbar({ onSelectLocation, onOpenServices, onOpenExpense
                       >
                         <span>🕒</span>
                         <span>{loc}</span>
+                        <span
+                          className="pk-loc-recent-del"
+                          title="Remove"
+                          onClick={(e) => removeSingleRecentLocation(e, loc)}
+                        >
+                          ✕
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -1718,47 +1887,101 @@ export default function Navbar({ onSelectLocation, onOpenServices, onOpenExpense
           <button
             className="pk-nav-icon-btn"
             type="button"
-            onClick={() => setNotifyOpen(!notifyOpen)}
+            onClick={handleToggleNotify}
             title="Notifications"
           >
             🔔
-            <span className="pk-badge-count">3</span>
+            {unreadCount > 0 ? (
+              <span className={`pk-badge-count ${user?.account_status === 'SUSPENDED' || user?.account_status === 'BLOCKED' ? 'is-alert' : ''}`}>
+                {unreadCount}
+              </span>
+            ) : (user?.account_status === 'SUSPENDED' || user?.account_status === 'BLOCKED') ? (
+              <span className="pk-badge-count is-alert">!</span>
+            ) : null}
           </button>
 
           {notifyOpen && (
             <div className="pk-popup-panel">
               <div className="pk-panel-head">
                 <b>Notifications</b>
-                <span>3 updates</span>
+                <span>
+                  {user?.account_status === 'SUSPENDED' || user?.account_status === 'BLOCKED'
+                    ? '⚠️ Action required'
+                    : `${notifications.length} updates`}
+                </span>
               </div>
               <div className="pk-panel-body">
-                <div className="pk-panel-item">
-                  <div className="pk-panel-item-icon">🏠</div>
-                  <div>
-                    <b style={{ fontSize: '13px', display: 'block', color: '#141414' }}>New property match</b>
-                    <p style={{ fontSize: '11px', color: '#5b5547', margin: '2px 0 0' }}>
-                      A verified rental in Salt Lake matches your preferences.
-                    </p>
+                {/* STRIKE 1 OR STRIKE 2 CRITICAL NOTIFICATION */}
+                {user?.account_status === 'BLOCKED' && (
+                  <div
+                    className="pk-panel-item"
+                    style={{
+                      background: '#fef2f2',
+                      borderLeft: '4px solid #dc2626',
+                      borderRadius: '8px',
+                      padding: '10px',
+                    }}
+                  >
+                    <div className="pk-panel-item-icon">⛔</div>
+                    <div>
+                      <b style={{ fontSize: '13px', display: 'block', color: '#991b1b' }}>
+                        Account Permanently Blocked (Strike 2)
+                      </b>
+                      <p style={{ fontSize: '11px', color: '#7f1d1d', margin: '2px 0 0', lineHeight: 1.4 }}>
+                        Reason: {user.block_reason || 'Repeated rule violations'}. All listing access, view details, and payments are permanently disabled.
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <div className="pk-panel-item">
-                  <div className="pk-panel-item-icon">❤️</div>
-                  <div>
-                    <b style={{ fontSize: '13px', display: 'block', color: '#141414' }}>Availability updated</b>
-                    <p style={{ fontSize: '11px', color: '#5b5547', margin: '2px 0 0' }}>
-                      A single room in New Town is now available for visit.
-                    </p>
+                )}
+
+                {user?.account_status === 'SUSPENDED' && (
+                  <div
+                    className="pk-panel-item"
+                    style={{
+                      background: '#fffbeb',
+                      borderLeft: '4px solid #f59e0b',
+                      borderRadius: '8px',
+                      padding: '10px',
+                    }}
+                  >
+                    <div className="pk-panel-item-icon">⚠️</div>
+                    <div>
+                      <b style={{ fontSize: '13px', display: 'block', color: '#92400e' }}>
+                        Account Suspended by Admin (Strike 1)
+                      </b>
+                      <p style={{ fontSize: '11px', color: '#78350f', margin: '2px 0 0', lineHeight: 1.4 }}>
+                        Reason: {user.block_reason || 'PointKey rules & regulations violation'}. View Details and payments are disabled.
+                      </p>
+                      <p style={{ fontSize: '10.5px', color: '#1f4d3f', fontWeight: 800, margin: '4px 0 0' }}>
+                        👉 Open NestAI chatbot (bottom right) to submit an unblock appeal.
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <div className="pk-panel-item">
-                  <div className="pk-panel-item-icon">🔔</div>
-                  <div>
-                    <b style={{ fontSize: '13px', display: 'block', color: '#141414' }}>PointKey reminder</b>
-                    <p style={{ fontSize: '11px', color: '#5b5547', margin: '2px 0 0' }}>
-                      Book your visit slot to verify rooms in person.
-                    </p>
+                )}
+
+                {/* DYNAMIC NOTIFICATIONS FROM DATABASE */}
+                {notifications.map((n) => (
+                  <div key={n.id} className="pk-panel-item" style={{ opacity: n.is_read ? 0.8 : 1 }}>
+                    <div className="pk-panel-item-icon">
+                      {n.type === 'ACCOUNT_BLOCKED' ? '⛔' : n.type === 'ACCOUNT_SUSPENDED' ? '⚠️' : n.type === 'APPEAL_APPROVED' ? '✅' : '🔔'}
+                    </div>
+                    <div>
+                      <b style={{ fontSize: '13px', display: 'block', color: '#141414' }}>{n.title}</b>
+                      <p style={{ fontSize: '11px', color: '#5b5547', margin: '2px 0 0', lineHeight: 1.4 }}>
+                        {n.message}
+                      </p>
+                      <small style={{ fontSize: '10px', color: '#9ca3af' }}>
+                        {n.created_at ? new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}
+                      </small>
+                    </div>
                   </div>
-                </div>
+                ))}
+
+                {notifications.length === 0 && !user?.account_status?.includes('SUSPENDED') && !user?.account_status?.includes('BLOCKED') && (
+                  <div style={{ textAlign: 'center', padding: '24px 12px', color: '#9ca3af', fontSize: '12px' }}>
+                    🔔 No new notifications
+                  </div>
+                )}
               </div>
             </div>
           )}

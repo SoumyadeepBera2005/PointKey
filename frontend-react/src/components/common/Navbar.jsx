@@ -452,9 +452,51 @@ export default function Navbar({ onSelectLocation, onOpenServices, onOpenExpense
   };
 
   const initialLetter = (user?.full_name || 'Tenant').charAt(0).toUpperCase();
+  const isMaintenanceBypass = typeof window !== 'undefined' && sessionStorage.getItem('pk_maintenance_bypass') === 'true';
 
   return (
-    <header className={`pointkey-navbar-root ${transparent ? 'pk-navbar-transparent' : ''}`}>
+    <>
+      {isMaintenanceBypass && (
+        <div style={{
+          position: 'sticky',
+          top: 0,
+          left: 0,
+          right: 0,
+          background: '#b45309',
+          color: '#ffffff',
+          fontSize: '11.5px',
+          fontWeight: 700,
+          padding: '6px 14px',
+          zIndex: 10001,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '14px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+        }}>
+          <span>⚠️ Site is currently OFFLINE for Maintenance — You are viewing in Preview Mode</span>
+          <button
+            type="button"
+            onClick={() => {
+              sessionStorage.removeItem('pk_maintenance_bypass');
+              window.location.href = '/';
+            }}
+            style={{
+              background: '#ffffff',
+              color: '#92400e',
+              border: 0,
+              borderRadius: '6px',
+              padding: '2px 9px',
+              fontSize: '10px',
+              fontWeight: 800,
+              cursor: 'pointer'
+            }}
+          >
+            Exit Preview
+          </button>
+        </div>
+      )}
+      <header className={`pointkey-navbar-root ${transparent ? 'pk-navbar-transparent' : ''}`}>
       <style>{`
         .pointkey-navbar-root {
           height: 72px;
@@ -2502,5 +2544,6 @@ export default function Navbar({ onSelectLocation, onOpenServices, onOpenExpense
         </div>
       )}
     </header>
+    </>
   );
 }

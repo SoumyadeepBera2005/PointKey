@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import api from '../services/api';
 import { getSocket, disconnectSocket } from '../services/socket';
+import AuthModal from '../components/auth/AuthModal';
 
 const AuthContext = createContext(null);
 
@@ -8,6 +9,22 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     try { return JSON.parse(localStorage.getItem('prent_user') || 'null'); } catch { return null; }
   });
+
+  // Global Auth Modal state
+  const [authModalState, setAuthModalState] = useState({
+    isOpen: false,
+    mode: 'login',
+    role: 'tenant',
+    promptMessage: '',
+  });
+
+  const openAuthModal = useCallback((mode = 'login', role = 'tenant', promptMessage = '') => {
+    setAuthModalState({ isOpen: true, mode, role, promptMessage });
+  }, []);
+
+  const closeAuthModal = useCallback(() => {
+    setAuthModalState((prev) => ({ ...prev, isOpen: false }));
+  }, []);
 
   const persist = useCallback((token, u) => {
     localStorage.setItem('prent_token', token);
@@ -149,8 +166,30 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, setUser, refreshUser, login, verifyLoginOtp, signup, adminLogin, logout, isAuthed: Boolean(user) }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        setUser,
+        refreshUser,
+        login,
+        verifyLoginOtp,
+        signup,
+        adminLogin,
+        logout,
+        isAuthed: Boolean(user),
+        authModalState,
+        openAuthModal,
+        closeAuthModal,
+      }}
+    >
       {children}
+      <AuthModal
+        isOpen={authModalState.isOpen}
+        onClose={closeAuthModal}
+        initialMode={authModalState.mode}
+        initialRole={authModalState.role}
+        promptMessage={authModalState.promptMessage}
+      />
     </AuthContext.Provider>
   );
 }

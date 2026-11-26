@@ -1,333 +1,773 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { Building2, X, Loader2, ShieldCheck } from 'lucide-react';
-import Input from '../ui/Input';
-import Button from '../ui/Button';
-import Toast from '../common/Toast';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { 
+  X, 
+  KeyRound, 
+  Building2, 
+  User, 
+  Mail, 
+  Phone, 
+  Lock, 
+  Eye, 
+  EyeOff, 
+  CheckCircle2, 
+  AlertCircle,
+  ArrowRight,
+  ShieldCheck
+} from 'lucide-react';
 import api from '../../services/api';
 
-/**
- * Login/signup shown as a modal overlay — never navigates to a separate page.
- * Login is 2 steps: email + mobile + password → OTP sent to the email.
- * Phone numbers are stored but never verified; the backend checks that the
- * email ↔ mobile pair belongs to the same account.
- */
-export default function AuthModal({ role = 'TENANT', onClose }) {
-  const [mode, setMode] = useState('login'); // login | signup | otp | forgot | reset
-  const [resetOtp, setResetOtp] = useState('');
+export default function AuthModal({ isOpen, onClose, initialMode = 'login', initialRole = 'tenant', promptMessage = '' }) {
+  const navigate = useNavigate();
+  const { login, verifyLoginOtp, signup, refreshUser } = useAuth();
+
+  const [role, setRole] = useState(initialRole); // 'tenant' | 'owner'
+  const [mode, setMode] = useState(initialMode); // 'login' | 'signup' | 'otp' | 'forgot' | 'reset' | 'done'
+
+  const [formData, setFormData] = useState({
+    fullName: '',
+    email: '',
+    phone: '',
+    password: '',
+    city: '',
+    gender: '',
+    occupation: '',
+    terms: false,
+    keepLoggedIn: true,
+  });
+
+  const [showPassword, setShowPassword] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [formError, setFormError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  // OTP flow states
+  const [otpCode, setOtpCode] = useState('');
+  const [maskedEmail, setMaskedEmail] = useState('');
+  const [devOtp, setDevOtp] = useState('');
+  const [otpSecondsLeft, setOtpSecondsLeft] = useState(60);
+  const [otpSuccessMsg, setOtpSuccessMsg] = useState('');
+
+  // Forgot password flow
+  const [resetCode, setResetCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [form, setForm] = useState({ full_name: '', email: '', phone: '', password: '', tenant_gender: '', tenant_occupation: '' });
-  const [otp, setOtp] = useState('');
-  const [maskedEmail, setMaskedEmail] = useState('');
-  const [toast, setToast] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const { login, signup, verifyLoginOtp } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
+  const [resetDevOtp, setResetDevOtp] = useState('');
 
-  const isTenant = role === 'TENANT';
-  const destination = () => location.state?.from?.pathname || (isTenant ? '/tenant' : '/owner');
-  const patch = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+  const [doneTitle, setDoneTitle] = useState('');
 
+  const isOwner = role === 'owner';
+  const roleUpper = isOwner ? 'OWNER' : 'TENANT';
+
+  // Sync mode and role when props change
   useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+    if (isOpen) {
+      setMode(initialMode || 'login');
+      setRole(initialRole || 'tenant');
+      setFieldErrors({});
+      setFormError('');
+      setDevOtp('');
+      setOtpCode('');
+    }
+  }, [isOpen, initialMode, initialRole]);
 
-  const submitPassword = async (e) => {
-    e.preventDefault();
-    setBusy(true);
-    setToast(null);
-    try {
-      if (mode === 'login') {
-        const data = await login(form.email, form.phone, form.password, role);
-        setMaskedEmail(data.email || form.email);
-        setMode('otp');
-        setToast({
-          type: 'info',
-          message: data.dev_otp ? `OTP sent (dev code: ${data.dev_otp})` : `OTP sent to ${data.email || 'your email'}`,
-        });
-      } else {
-        await signup({
-          full_name: form.full_name,
-          email: form.email,
-          phone: form.phone,
-          password: form.password,
-          role,
-          tenant_gender: isTenant ? form.tenant_gender || undefined : undefined,
-          tenant_occupation: isTenant ? form.tenant_occupation || undefined : undefined,
-        });
-        navigate(destination(), { replace: true });
+  // Format countdown seconds MM:SS
+  const formatTime = (secs) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  // Timer effect for OTP
+  useEffect(() => {
+    if (mode !== 'otp' && mode !== 'reset') return;
+    if (otpSecondsLeft <= 0) return;
+
+    const timer = setInterval(() => {
+      setOtpSecondsLeft((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [mode, otpSecondsLeft]);
+
+  if (!isOpen) return null;
+
+  const validateForm = () => {
+    const errors = {};
+    if (mode === 'login') {
+      if (!formData.email.trim()) errors.email = 'Please enter your email.';
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(formData.email.trim())) {
+        errors.email = 'Enter a valid email address.';
       }
-    } catch (err) {
-      setToast({ type: 'error', message: err.response?.data?.message || 'Authentication failed' });
-    } finally {
-      setBusy(false);
+      if (!formData.phone.trim()) errors.phone = 'Please enter your phone number.';
+      else {
+        const digits = formData.phone.replace(/\D/g, '');
+        if (digits.length < 10) errors.phone = 'Enter a valid 10-digit mobile number.';
+      }
+      if (!formData.password) errors.password = 'Please enter your password.';
+    } else if (mode === 'signup') {
+      if (!formData.fullName.trim()) errors.fullName = 'Please enter your full name.';
+      if (!formData.phone.trim()) errors.phone = 'Please enter your phone number.';
+      else {
+        const digits = formData.phone.replace(/\D/g, '');
+        if (digits.length < 10) errors.phone = 'Enter a valid 10-digit mobile number.';
+      }
+      if (!formData.email.trim()) errors.email = 'Please enter your email.';
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(formData.email.trim())) {
+        errors.email = 'Enter a valid email address.';
+      }
+      if (!formData.password) errors.password = 'Please create a password.';
+      else if (formData.password.length < 6) errors.password = 'Password must be at least 6 characters.';
+
+      if (isOwner && !formData.city.trim()) {
+        errors.city = 'Please specify where your property is located.';
+      }
+      if (!formData.terms) {
+        errors.terms = 'Please accept the Terms to continue.';
+      }
     }
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
-  const verifyOtp = async (e) => {
-    e?.preventDefault?.();
+  const handleLoginSubmit = async (e) => {
+    e.preventDefault();
+    if (!validateForm()) return;
     setBusy(true);
-    setToast(null);
+    setFormError('');
+
     try {
-      await verifyLoginOtp(form.email, otp, role);
-      navigate(destination(), { replace: true });
+      const data = await login(formData.email.trim(), formData.phone.trim(), formData.password, roleUpper);
+      setMaskedEmail(data.email || formData.email.trim());
+      if (data.dev_otp) setDevOtp(data.dev_otp);
+      setOtpSecondsLeft(60);
+      setOtpSuccessMsg('');
+      setMode('otp');
     } catch (err) {
-      setToast({ type: 'error', message: err.response?.data?.message || 'Invalid or expired OTP' });
+      setFormError(err.response?.data?.message || 'Login failed. Please check your credentials.');
     } finally {
       setBusy(false);
     }
   };
 
-  const sendResetOtp = async (e) => {
-    e?.preventDefault?.();
-    setBusy(true);
-    setToast(null);
-    try {
-      const { data } = await api.post('/auth/forgot-password', { email: form.email });
-      setMode('reset');
-      setToast({
-        type: 'info',
-        message: data.dev_otp ? `OTP sent (dev code: ${data.dev_otp})` : 'If an account exists for this email, an OTP has been sent',
-      });
-    } catch (err) {
-      setToast({ type: 'error', message: err.response?.data?.message || 'Failed to send OTP' });
-    } finally {
-      setBusy(false);
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    if (!otpCode.trim()) {
+      setFormError('Please enter the 6-digit OTP.');
+      return;
     }
-  };
-
-  const submitReset = async (e) => {
-    e?.preventDefault?.();
-    setToast(null);
-    if (newPassword !== confirmPassword) {
-      setToast({ type: 'error', message: 'Passwords do not match' });
+    if (otpSecondsLeft <= 0) {
+      setFormError('Your code has expired. Click "Resend code" below.');
       return;
     }
     setBusy(true);
+    setFormError('');
+
     try {
-      const { data } = await api.post('/auth/reset-password', { email: form.email, code: resetOtp, new_password: newPassword });
-      setToast({ type: 'success', message: data.message || 'Password updated — login with your new password' });
-      setMode('login');
-      setForm({ ...form, password: '' });
-      setResetOtp('');
-      setNewPassword('');
-      setConfirmPassword('');
+      const u = await verifyLoginOtp(formData.email.trim(), otpCode.trim(), roleUpper);
+      setDoneTitle('Logged In Successfully!');
+      setMode('done');
+      await refreshUser();
+      setTimeout(() => {
+        onClose();
+        if (u.role === 'OWNER') navigate('/owner');
+      }, 900);
     } catch (err) {
-      setToast({ type: 'error', message: err.response?.data?.message || 'Invalid or expired OTP' });
+      setFormError(err.response?.data?.message || 'Invalid or expired OTP code.');
     } finally {
       setBusy(false);
     }
   };
 
-  const resendResetOtp = async () => {
+  const handleResendLoginOtp = async () => {
     setBusy(true);
-    setToast(null);
+    setFormError('');
+    setOtpSuccessMsg('');
     try {
-      const { data } = await api.post('/auth/forgot-password', { email: form.email });
-      setToast({
-        type: 'info',
-        message: data.dev_otp ? `OTP re-sent (dev code: ${data.dev_otp})` : 'OTP re-sent to your email',
-      });
+      const data = await login(formData.email.trim(), formData.phone.trim(), formData.password, roleUpper);
+      if (data.dev_otp) setDevOtp(data.dev_otp);
+      setOtpSecondsLeft(60);
+      setOtpSuccessMsg('A fresh verification code has been sent to your email.');
     } catch (err) {
-      setToast({ type: 'error', message: err.response?.data?.message || 'Failed to resend OTP' });
+      setFormError(err.response?.data?.message || 'Failed to resend OTP.');
     } finally {
       setBusy(false);
     }
   };
 
-  const resendOtp = async () => {
+  const handleSignupSubmit = async (e) => {
+    e.preventDefault();
+    if (!validateForm()) return;
     setBusy(true);
-    setToast(null);
+    setFormError('');
+
     try {
-      const data = await login(form.email, form.phone, form.password, role);
-      setToast({
-        type: 'info',
-        message: data.dev_otp ? `OTP re-sent (dev code: ${data.dev_otp})` : `OTP re-sent to ${data.email || maskedEmail}`,
+      const u = await signup({
+        full_name: formData.fullName.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone.trim(),
+        password: formData.password,
+        role: roleUpper,
+        tenant_gender: !isOwner ? formData.gender || undefined : undefined,
+        tenant_occupation: !isOwner ? formData.occupation || undefined : undefined,
       });
+
+      setDoneTitle('Account Created Successfully!');
+      setMode('done');
+      await refreshUser();
+      setTimeout(() => {
+        onClose();
+        if (u.role === 'OWNER') navigate('/owner');
+      }, 900);
     } catch (err) {
-      setToast({ type: 'error', message: err.response?.data?.message || 'Failed to resend OTP' });
+      setFormError(err.response?.data?.message || 'Registration failed. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Forgot password handler
+  const handleForgotSubmit = async (e) => {
+    e.preventDefault();
+    if (!formData.email.trim()) {
+      setFieldErrors({ email: 'Please enter your registered email.' });
+      return;
+    }
+    setBusy(true);
+    setFormError('');
+    try {
+      const { data } = await api.post('/auth/forgot-password', { email: formData.email.trim() });
+      if (data.dev_otp) setResetDevOtp(data.dev_otp);
+      setOtpSecondsLeft(60);
+      setMode('reset');
+    } catch (err) {
+      setFormError(err.response?.data?.message || 'Could not find account with this email.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleResetSubmit = async (e) => {
+    e.preventDefault();
+    if (!resetCode.trim() || !newPassword) {
+      setFormError('Please enter reset OTP and your new password.');
+      return;
+    }
+    if (newPassword.length < 6) {
+      setFormError('New password must be at least 6 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setFormError('Passwords do not match.');
+      return;
+    }
+    setBusy(true);
+    setFormError('');
+    try {
+      await api.post('/auth/reset-password', {
+        email: formData.email.trim(),
+        otp: resetCode.trim(),
+        newPassword,
+      });
+      setDoneTitle('Password Reset Successfully!');
+      setMode('done');
+      setTimeout(() => {
+        setMode('login');
+      }, 1200);
+    } catch (err) {
+      setFormError(err.response?.data?.message || 'Failed to reset password.');
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-[2px]" onClick={onClose}>
-      <motion.div
-        initial={{ opacity: 0, y: 42, scale: 0.94 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 24, scale: 0.96 }}
-        transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-        className="glass-card max-h-[94vh] w-full max-w-md overflow-y-auto p-6 sm:p-7"
+    <div className="fixed inset-0 z-[10000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto font-sans animate-in fade-in duration-200">
+      
+      {/* Modal Card */}
+      <div 
+        className="bg-[#FBF8F2] border border-[#E8DCB9] rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl relative my-auto animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label={mode === 'signup' ? 'Create account' : mode === 'forgot' || mode === 'reset' ? 'Reset password' : 'Login'}
       >
-        {/* Header */}
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-2 text-forest">
-            <Building2 size={24} />
-            <span className="text-2xl font-black tracking-tight text-navy">pRent</span>
-            <span className="rounded-full bg-forest/15 border border-forest/30 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-forest">
-              {isTenant ? 'Tenant' : 'Owner'}
-            </span>
+        {/* Close Button */}
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-4 right-4 w-8 h-8 rounded-full bg-[#ede3cc] hover:bg-[#d8cba9] text-[#17324D] flex items-center justify-center transition-colors"
+          aria-label="Close"
+        >
+          <X size={18} />
+        </button>
+
+        {/* Top Branding */}
+        <div className="flex items-center gap-2 mb-2">
+          <div className="w-8 h-8 rounded-lg bg-[#1f4d3f] flex items-center justify-center text-white font-extrabold text-sm">
+            pK
           </div>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 transition hover:bg-beige-border/50 hover:text-navy" aria-label="Close">
-            <X size={20} />
-          </button>
+          <span className="text-lg font-black text-[#17324D] tracking-tight">PointKey</span>
+          <span className="ml-auto mr-7 inline-block px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold">
+            ZERO BROKERAGE
+          </span>
         </div>
 
-        {(mode === 'login' || mode === 'signup') ? (
-          <>
-            <h1 className="mt-4 text-xl font-extrabold text-navy">
-              {mode === 'signup' ? 'Create your account' : 'Welcome back'}
-            </h1>
-            <p className="text-xs text-slate-600">
-              {isTenant ? 'Find your next home with trust.' : 'List your property in minutes.'}
-            </p>
-
-            <form onSubmit={submitPassword} className="mt-5 space-y-3">
-              {mode === 'signup' && (
-                <Input label="Full name" required value={form.full_name} onChange={patch('full_name')} placeholder="Ananya Iyer" />
-              )}
-              <Input label="Email" type="email" required value={form.email} onChange={patch('email')} placeholder="you@example.com" />
-              <Input label="Mobile number" type="tel" required inputMode="numeric" value={form.phone} onChange={patch('phone')} placeholder="9830012345" />
-              <Input label="Password" type="password" required minLength={6} value={form.password} onChange={patch('password')} placeholder="••••••••" />
-              {mode === 'login' && (
-                <div className="-mt-1 text-right">
-                  <button type="button" onClick={() => { setMode('forgot'); setToast(null); }} className="text-xs font-semibold text-forest hover:underline">
-                    Forgot password?
-                  </button>
-                </div>
-              )}
-
-              {mode === 'signup' && isTenant && (
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="block">
-                    <span className="label">Gender</span>
-                    <select className="input" value={form.tenant_gender} onChange={patch('tenant_gender')}>
-                      <option value="">Select</option>
-                      <option value="MALE">Male</option>
-                      <option value="FEMALE">Female</option>
-                      <option value="FAMILY">Family</option>
-                    </select>
-                  </label>
-                  <label className="block">
-                    <span className="label">Occupation</span>
-                    <select className="input" value={form.tenant_occupation} onChange={patch('tenant_occupation')}>
-                      <option value="">Select</option>
-                      <option value="STUDENT">Student</option>
-                      <option value="WORKING_PROFESSIONAL">Working Professional</option>
-                      <option value="FAMILY">Family</option>
-                    </select>
-                  </label>
-                </div>
-              )}
-
-              <Button type="submit" className="w-full" disabled={busy}>
-                {busy
-                  ? <Loader2 className="animate-spin" size={18} />
-                  : (mode === 'login' ? 'Login' : 'Create account')}
-              </Button>
-            </form>
-
-            {/* Toggle login ↔ signup */}
-            <p className="mt-4 text-center text-sm text-slate-600">
-              {mode === 'login' ? (
-                <>New user?{' '}
-                  <button type="button" onClick={() => { setMode('signup'); setToast(null); }} className="font-bold text-forest hover:underline">
-                    Sign up
-                  </button>
-                </>
-              ) : (
-                <>Already have an account?{' '}
-                  <button type="button" onClick={() => { setMode('login'); setToast(null); }} className="font-bold text-forest hover:underline">
-                    Login
-                  </button>
-                </>
-              )}
-            </p>
-          </>
-        ) : mode === 'otp' ? (
-          /* OTP step — verification code is sent to the email used above */
-          <>
-            <div className="mt-4 flex items-center gap-3 rounded-xl bg-forest/10 border border-forest/20 px-4 py-3">
-              <ShieldCheck size={22} className="shrink-0 text-forest" />
-              <p className="text-xs leading-snug text-navy">
-                We sent a 6-digit code to <span className="font-bold">{maskedEmail}</span>.<br />
-                Phone numbers are not verified — this email check keeps your account safe.
-              </p>
-            </div>
-            <form onSubmit={verifyOtp} className="mt-4 space-y-3">
-              <Input label="Enter OTP" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" placeholder="6-digit code" autoFocus />
-              <Button type="submit" className="w-full" disabled={busy || otp.length < 4}>
-                {busy ? <Loader2 className="animate-spin" size={18} /> : 'Verify & Login'}
-              </Button>
-            </form>
-            <div className="mt-3 flex items-center justify-between text-xs">
-              <button type="button" onClick={() => setMode('login')} className="font-semibold text-slate-400 hover:text-navy">
-                ← Back
-              </button>
-              <button type="button" onClick={resendOtp} disabled={busy} className="font-semibold text-forest hover:underline disabled:opacity-50">
-                Resend code
-              </button>
-            </div>
-          </>
-        ) : mode === 'forgot' ? (
-          /* Forgot password — OTP goes to the email attached to the account */
-          <>
-            <h1 className="mt-4 text-xl font-extrabold text-navy">Forgot password</h1>
-            <p className="text-xs text-slate-600">We&apos;ll send a 6-digit OTP to the email attached to your account.</p>
-            <form onSubmit={sendResetOtp} className="mt-5 space-y-3">
-              <Input label="Email" type="email" required value={form.email} onChange={patch('email')} placeholder="you@example.com" autoFocus />
-              <Button type="submit" className="w-full" disabled={busy}>
-                {busy ? <Loader2 className="animate-spin" size={18} /> : 'Send OTP'}
-              </Button>
-            </form>
-            <div className="mt-3 flex items-center justify-start text-xs">
-              <button type="button" onClick={() => setMode('login')} className="font-semibold text-slate-400 hover:text-navy">
-                ← Back to login
-              </button>
-            </div>
-          </>
-        ) : (
-          /* Reset — verify OTP from the email, then set a new password */
-          <>
-            <div className="mt-4 flex items-center gap-3 rounded-xl bg-forest/10 border border-forest/20 px-4 py-3">
-              <ShieldCheck size={22} className="shrink-0 text-forest" />
-              <p className="text-xs leading-snug text-navy">
-                If an account exists for <span className="font-bold">{form.email}</span>, we sent a 6-digit code there.
-              </p>
-            </div>
-            <form onSubmit={submitReset} className="mt-4 space-y-3">
-              <Input label="Enter OTP" value={resetOtp} onChange={(e) => setResetOtp(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" placeholder="6-digit code" autoFocus />
-              <Input label="New password" type="password" required minLength={6} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="••••••••" />
-              <Input label="Confirm new password" type="password" required minLength={6} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="••••••••" />
-              <Button type="submit" className="w-full" disabled={busy || resetOtp.length < 4}>
-                {busy ? <Loader2 className="animate-spin" size={18} /> : 'Verify & Update password'}
-              </Button>
-            </form>
-            <div className="mt-3 flex items-center justify-between text-xs">
-              <button type="button" onClick={() => setMode('forgot')} className="font-semibold text-slate-400 hover:text-navy">
-                ← Back
-              </button>
-              <button type="button" onClick={resendResetOtp} disabled={busy} className="font-semibold text-forest hover:underline disabled:opacity-50">
-                Resend code
-              </button>
-            </div>
-          </>
+        {promptMessage && (
+          <div className="mb-3 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold flex items-center gap-2">
+            <AlertCircle size={15} className="shrink-0 text-amber-600" />
+            <span>{promptMessage}</span>
+          </div>
         )}
 
-        <p className="mt-4 text-center text-[10px] text-slate-400">By continuing you agree to pRent&apos;s Terms &amp; Privacy Policy.</p>
-      </motion.div>
-      <Toast toast={toast} onDismiss={() => setToast(null)} />
+        {/* ==============================================================
+            MODE: DONE SUCCESS ANIMATION
+            ============================================================== */}
+        {mode === 'done' && (
+          <div className="py-8 text-center animate-in fade-in">
+            <div className="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-4">
+              <CheckCircle2 size={36} />
+            </div>
+            <h3 className="text-xl font-black text-[#17324D]">{doneTitle}</h3>
+            <p className="text-xs text-slate-600 mt-1">Updating your experience...</p>
+          </div>
+        )}
+
+        {/* ==============================================================
+            MODE: OTP VERIFICATION
+            ============================================================== */}
+        {mode === 'otp' && (
+          <div>
+            <h3 className="text-xl font-extrabold text-[#17324D] mt-2">Enter Verification Code</h3>
+            <p className="text-xs text-slate-600 mt-1">
+              We sent a 6-digit code to <strong className="text-slate-900">{maskedEmail}</strong>.
+            </p>
+
+            {devOtp && (
+              <div className="mt-2.5 p-2 rounded-xl bg-emerald-50 border border-emerald-300 text-[11px] text-emerald-800 font-bold">
+                🔑 Development Auto-Code: <span className="font-mono text-sm tracking-wider font-extrabold">{devOtp}</span>
+              </div>
+            )}
+
+            {otpSuccessMsg && (
+              <p className="text-xs text-emerald-700 mt-2 font-semibold">{otpSuccessMsg}</p>
+            )}
+
+            <form onSubmit={handleVerifyOtp} className="mt-4 space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">6-Digit Code</label>
+                <input
+                  type="text"
+                  maxLength={6}
+                  placeholder="• • • • • •"
+                  value={otpCode}
+                  onChange={(e) => {
+                    setOtpCode(e.target.value.replace(/\D/g, ''));
+                    setFormError('');
+                  }}
+                  className="w-full px-4 py-2.5 text-center tracking-[0.4em] font-mono font-bold text-lg rounded-xl bg-white border border-[#d8cba9] focus:outline-none focus:border-[#1f4d3f]"
+                  autoFocus
+                />
+              </div>
+
+              {formError && (
+                <p className="text-xs text-red-600 font-medium">{formError}</p>
+              )}
+
+              <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+                <span>Code expires in: <strong className="text-slate-800">{formatTime(otpSecondsLeft)}</strong></span>
+                <button
+                  type="button"
+                  onClick={handleResendLoginOtp}
+                  disabled={busy}
+                  className="font-bold text-[#1f4d3f] hover:underline disabled:opacity-50"
+                >
+                  Resend code
+                </button>
+              </div>
+
+              <button
+                type="submit"
+                disabled={busy}
+                className="w-full py-3 rounded-xl bg-[#1f4d3f] hover:bg-[#15382e] text-white font-extrabold text-sm shadow transition mt-2"
+              >
+                {busy ? 'Verifying Code...' : 'Verify & Log In'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMode('login')}
+                className="w-full text-center text-xs font-bold text-slate-500 hover:text-slate-800 mt-2"
+              >
+                ← Back to Login
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* ==============================================================
+            MODE: FORGOT PASSWORD
+            ============================================================== */}
+        {mode === 'forgot' && (
+          <div>
+            <h3 className="text-xl font-extrabold text-[#17324D] mt-2">Reset Password</h3>
+            <p className="text-xs text-slate-600 mt-1">Enter your registered email to receive a reset code.</p>
+
+            <form onSubmit={handleForgotSubmit} className="mt-4 space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Email Address</label>
+                <input
+                  type="email"
+                  placeholder="e.g. user@example.com"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#d8cba9] text-xs font-medium focus:outline-none focus:border-[#1f4d3f]"
+                  autoFocus
+                />
+                {fieldErrors.email && <p className="text-[11px] text-red-600 mt-0.5">{fieldErrors.email}</p>}
+              </div>
+
+              {formError && <p className="text-xs text-red-600">{formError}</p>}
+
+              <button
+                type="submit"
+                disabled={busy}
+                className="w-full py-2.5 rounded-xl bg-[#1f4d3f] hover:bg-[#15382e] text-white font-extrabold text-xs shadow"
+              >
+                {busy ? 'Sending Reset Code...' : 'Send Reset Code'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMode('login')}
+                className="w-full text-center text-xs font-bold text-slate-500 hover:text-slate-800 mt-1"
+              >
+                ← Back to Login
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* ==============================================================
+            MODE: RESET PASSWORD STEP
+            ============================================================== */}
+        {mode === 'reset' && (
+          <div>
+            <h3 className="text-xl font-extrabold text-[#17324D] mt-2">Set New Password</h3>
+            <p className="text-xs text-slate-600 mt-1">Enter the OTP sent to your email and choose a new password.</p>
+
+            {resetDevOtp && (
+              <div className="mt-2 p-2 rounded-xl bg-emerald-50 border border-emerald-300 text-[11px] text-emerald-800 font-bold">
+                🔑 Reset Code: <span className="font-mono text-sm tracking-wider font-extrabold">{resetDevOtp}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleResetSubmit} className="mt-4 space-y-2.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Reset OTP Code</label>
+                <input
+                  type="text"
+                  placeholder="Enter 6-digit code"
+                  value={resetCode}
+                  onChange={(e) => setResetCode(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#d8cba9] text-xs font-medium focus:outline-none focus:border-[#1f4d3f]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">New Password</label>
+                <input
+                  type="password"
+                  placeholder="At least 6 characters"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#d8cba9] text-xs font-medium focus:outline-none focus:border-[#1f4d3f]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Confirm New Password</label>
+                <input
+                  type="password"
+                  placeholder="Re-type new password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#d8cba9] text-xs font-medium focus:outline-none focus:border-[#1f4d3f]"
+                />
+              </div>
+
+              {formError && <p className="text-xs text-red-600">{formError}</p>}
+
+              <button
+                type="submit"
+                disabled={busy}
+                className="w-full py-2.5 rounded-xl bg-[#1f4d3f] hover:bg-[#15382e] text-white font-extrabold text-xs shadow mt-2"
+              >
+                {busy ? 'Updating Password...' : 'Save New Password & Log In'}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* ==============================================================
+            MODE: MAIN LOGIN OR SIGNUP
+            ============================================================== */}
+        {(mode === 'login' || mode === 'signup') && (
+          <div>
+            <h3 className="text-xl font-black text-[#17324D] mt-1">
+              {mode === 'login' ? 'Welcome back to PointKey' : 'Create your PointKey Account'}
+            </h3>
+            <p className="text-xs text-slate-600 mt-0.5">
+              {mode === 'login'
+                ? 'Sign in to access your profile, saved homes & bookings.'
+                : 'Join thousands of tenants & owners renting directly with zero brokerage.'}
+            </p>
+
+            {/* Role Toggle Selector */}
+            <div className="mt-3.5 grid grid-cols-2 gap-2 bg-[#ede3cc] p-1 rounded-2xl">
+              <button
+                type="button"
+                onClick={() => setRole('tenant')}
+                className={`py-2 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition ${
+                  !isOwner ? 'bg-[#1f4d3f] text-white shadow' : 'text-[#17324D] hover:bg-white/40'
+                }`}
+              >
+                <User size={14} />
+                <span>I&apos;m a Tenant</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setRole('owner')}
+                className={`py-2 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition ${
+                  isOwner ? 'bg-[#1f4d3f] text-white shadow' : 'text-[#17324D] hover:bg-white/40'
+                }`}
+              >
+                <Building2 size={14} />
+                <span>I&apos;m an Owner</span>
+              </button>
+            </div>
+
+            {/* Mode Tabs (Login / Signup) */}
+            <div className="flex border-b border-[#d8cba9] mt-3">
+              <button
+                type="button"
+                onClick={() => { setMode('login'); setFieldErrors({}); setFormError(''); }}
+                className={`flex-1 py-2 text-xs font-extrabold border-b-2 transition ${
+                  mode === 'login' ? 'border-[#1f4d3f] text-[#1f4d3f]' : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Log In
+              </button>
+              <button
+                type="button"
+                onClick={() => { setMode('signup'); setFieldErrors({}); setFormError(''); }}
+                className={`flex-1 py-2 text-xs font-extrabold border-b-2 transition ${
+                  mode === 'signup' ? 'border-[#1f4d3f] text-[#1f4d3f]' : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Sign Up
+              </button>
+            </div>
+
+            {/* FORM */}
+            <form onSubmit={mode === 'login' ? handleLoginSubmit : handleSignupSubmit} className="mt-3.5 space-y-2.5">
+              
+              {/* Full Name for Signup */}
+              {mode === 'signup' && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-0.5">Full Name</label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-2.5 text-slate-400" size={15} />
+                    <input
+                      type="text"
+                      placeholder="e.g. Subham Roy"
+                      value={formData.fullName}
+                      onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                      className="w-full pl-9 pr-3 py-2 rounded-xl bg-white border border-[#d8cba9] text-xs font-medium focus:outline-none focus:border-[#1f4d3f]"
+                    />
+                  </div>
+                  {fieldErrors.fullName && <p className="text-[11px] text-red-600 mt-0.5">{fieldErrors.fullName}</p>}
+                </div>
+              )}
+
+              {/* Email Address */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-0.5">Email Address</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-2.5 text-slate-400" size={15} />
+                  <input
+                    type="email"
+                    placeholder="e.g. user@example.com"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="w-full pl-9 pr-3 py-2 rounded-xl bg-white border border-[#d8cba9] text-xs font-medium focus:outline-none focus:border-[#1f4d3f]"
+                  />
+                </div>
+                {fieldErrors.email && <p className="text-[11px] text-red-600 mt-0.5">{fieldErrors.email}</p>}
+              </div>
+
+              {/* Phone Number */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-0.5">Mobile Number</label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-2.5 text-slate-400" size={15} />
+                  <input
+                    type="tel"
+                    placeholder="10-digit mobile number"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    className="w-full pl-9 pr-3 py-2 rounded-xl bg-white border border-[#d8cba9] text-xs font-medium focus:outline-none focus:border-[#1f4d3f]"
+                  />
+                </div>
+                {fieldErrors.phone && <p className="text-[11px] text-red-600 mt-0.5">{fieldErrors.phone}</p>}
+              </div>
+
+              {/* Password */}
+              <div>
+                <div className="flex items-center justify-between mb-0.5">
+                  <label className="block text-xs font-bold text-slate-700">Password</label>
+                  {mode === 'login' && (
+                    <button
+                      type="button"
+                      onClick={() => setMode('forgot')}
+                      className="text-[11px] font-bold text-[#1f4d3f] hover:underline"
+                    >
+                      Forgot password?
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-2.5 text-slate-400" size={15} />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Enter password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    className="w-full pl-9 pr-9 py-2 rounded-xl bg-white border border-[#d8cba9] text-xs font-medium focus:outline-none focus:border-[#1f4d3f]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-2 text-slate-400 hover:text-slate-700"
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                {fieldErrors.password && <p className="text-[11px] text-red-600 mt-0.5">{fieldErrors.password}</p>}
+              </div>
+
+              {/* Specific details for signup */}
+              {mode === 'signup' && (
+                <>
+                  {!isOwner ? (
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-0.5">Occupation</label>
+                        <select
+                          value={formData.occupation}
+                          onChange={(e) => setFormData({ ...formData, occupation: e.target.value })}
+                          className="w-full px-2.5 py-1.5 rounded-xl bg-white border border-[#d8cba9] text-xs font-medium focus:outline-none"
+                        >
+                          <option value="">Select (optional)</option>
+                          <option value="Student">Student</option>
+                          <option value="Working Professional">Working Professional</option>
+                          <option value="Business">Business</option>
+                          <option value="Family">Family Member</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-0.5">Gender</label>
+                        <select
+                          value={formData.gender}
+                          onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                          className="w-full px-2.5 py-1.5 rounded-xl bg-white border border-[#d8cba9] text-xs font-medium focus:outline-none"
+                        >
+                          <option value="">Select (optional)</option>
+                          <option value="Male">Male</option>
+                          <option value="Female">Female</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-0.5">Property Location City</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Kolkata, Salt Lake, New Town"
+                        value={formData.city}
+                        onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                        className="w-full px-3 py-2 rounded-xl bg-white border border-[#d8cba9] text-xs font-medium focus:outline-none"
+                      />
+                      {fieldErrors.city && <p className="text-[11px] text-red-600 mt-0.5">{fieldErrors.city}</p>}
+                    </div>
+                  )}
+
+                  <label className="flex items-start gap-2 text-[11px] text-slate-600 pt-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.terms}
+                      onChange={(e) => setFormData({ ...formData, terms: e.target.checked })}
+                      className="mt-0.5 rounded accent-[#1f4d3f]"
+                    />
+                    <span>
+                      I agree to the PointKey Zero Brokerage Terms &amp; Community Rules.
+                    </span>
+                  </label>
+                  {fieldErrors.terms && <p className="text-[11px] text-red-600">{fieldErrors.terms}</p>}
+                </>
+              )}
+
+              {/* General Form Error */}
+              {formError && (
+                <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium">
+                  {formError}
+                </div>
+              )}
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={busy}
+                className="w-full py-3 rounded-xl bg-[#1f4d3f] hover:bg-[#15382e] text-white font-extrabold text-sm shadow-md transition-all active:scale-95 disabled:opacity-60 mt-2"
+              >
+                {busy
+                  ? 'Processing...'
+                  : mode === 'login'
+                  ? `Log in as ${isOwner ? 'Owner' : 'Tenant'}`
+                  : `Create ${isOwner ? 'Owner' : 'Tenant'} Account`}
+              </button>
+            </form>
+
+            {/* Bottom Switch Link */}
+            <div className="text-center pt-3 text-xs text-slate-600">
+              {mode === 'login' ? (
+                <span>
+                  Don&apos;t have an account?{' '}
+                  <button
+                    type="button"
+                    onClick={() => { setMode('signup'); setFieldErrors({}); setFormError(''); }}
+                    className="font-extrabold text-[#1f4d3f] hover:underline"
+                  >
+                    Sign up now
+                  </button>
+                </span>
+              ) : (
+                <span>
+                  Already have an account?{' '}
+                  <button
+                    type="button"
+                    onClick={() => { setMode('login'); setFieldErrors({}); setFormError(''); }}
+                    className="font-extrabold text-[#1f4d3f] hover:underline"
+                  >
+                    Log in
+                  </button>
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+      </div>
     </div>
   );
 }

@@ -661,55 +661,58 @@ export default function TenantHome() {
           overflow-x: hidden;
         }
 
-        /* HERO SECTION */
-        .pk-hero-root {
-          position: relative;
-          min-height: clamp(680px, 82vh, 840px);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 132px 24px 116px;
-          background: #0F172A;
-          color: #ffffff;
-          overflow: hidden;
-        }
-
-        .hero-slide-layer {
+        /* HERO BACKGROUND IMAGE SLIDESHOW (7 IMAGES, LOOPS FOREVER) */
+        .hero-bg {
           position: absolute;
           inset: 0;
           z-index: 0;
+          overflow: hidden;
+          background: #EAF1F8;
+        }
+
+        .hero-slide {
+          position: absolute;
+          inset: 0;
           background-size: cover;
           background-position: center;
           opacity: 0;
-          transition: opacity 1.2s ease-in-out;
+          transform: scale(1.02);
+          filter: brightness(1.07) saturate(1.1) contrast(1.02);
+          animation: heroFade 42s infinite;
           will-change: opacity, transform;
         }
 
-        .hero-slide-layer.active {
-          opacity: 1;
-          z-index: 1;
+        .hero-slide:nth-child(1) { animation-delay: -1.8s; background-position: 14% center; }
+        .hero-slide:nth-child(2) { animation-delay: 4.2s; background-position: 30% center; }
+        .hero-slide:nth-child(3) { animation-delay: 10.2s; }
+        .hero-slide:nth-child(4) { animation-delay: 16.2s; }
+        .hero-slide:nth-child(5) { animation-delay: 22.2s; background-position: 78% center; }
+        .hero-slide:nth-child(6) { animation-delay: 28.2s; }
+        .hero-slide:nth-child(7) { animation-delay: 34.2s; }
+
+        @keyframes heroFade {
+          0%   { opacity: 0; transform: scale(1.02); }
+          4%   { opacity: 1; }
+          15%  { opacity: 1; }
+          19%  { opacity: 0; transform: scale(1.09); }
+          100% { opacity: 0; transform: scale(1.09); }
         }
 
-        @keyframes kenBurnsSlow {
-          0% { transform: scale(1.02) translate3d(-0.8%, -0.4%, 0); }
-          50% { transform: scale(1.08) translate3d(0.8%, 0.6%, 0); }
-          100% { transform: scale(1.02) translate3d(-0.8%, -0.4%, 0); }
-        }
-
-        .ken-burns {
-          animation: kenBurnsSlow 12s ease-in-out infinite;
-        }
-
-        .hero-vignette {
+        .hero-overlay {
           position: absolute;
           inset: 0;
-          z-index: 2;
-          background: linear-gradient(
-            to bottom,
-            rgba(15, 23, 42, 0.76) 0%,
-            rgba(17, 24, 39, 0.64) 50%,
-            rgba(15, 23, 42, 0.88) 100%
-          );
+          z-index: 1;
+          background: linear-gradient(180deg, rgba(12,72,132,.62) 0%, rgba(12,72,132,.48) 48%, rgba(12,72,132,.24) 78%, rgba(246,241,231,.78) 100%);
+        }
+
+        .hero-text-shadow {
+          text-shadow: 0 3px 18px rgba(0,12,35,.95), 0 1px 4px rgba(0,12,35,.9);
+        }
+
+        .hero-word {
+          display: inline-block;
+          color: #FF9A1F;
+          text-shadow: 0 1px 0 #c96a00, 0 2px 0 #b35e00, 0 4px 10px rgba(0,0,0,.6);
         }
 
         .pk-hero-content {
@@ -2076,43 +2079,55 @@ export default function TenantHome() {
         }
       `}</style>
 
-      {/* TOP NAVIGATION BAR (TRANSPARENT OYO-STYLE OVER HERO REEL) */}
+      {/* TOP NAVIGATION BAR (STICKY, DARK NAVY DESIGN MATCHING REFERENCE VIDEO) */}
       <Navbar
-        transparent={true}
         activePillar={activePillar}
         onSwitchPillar={(pillar) => setActivePillar(pillar)}
         onSelectLocation={(loc) => {
           setSelectedCity(loc);
+          if (loc !== 'All Locations' && loc !== 'All Cities') {
+            setSearchQuery(loc);
+          } else {
+            setSearchQuery('');
+          }
           showToast(`Filtered listings in ${loc}`);
         }}
         onOpenServices={() => setActivePillar('FacilityKart')}
         onOpenExpenses={() => setActivePillar('BudgetKart')}
       />
 
-      {/* STICKY SEARCH BAR ON SCROLL (OYO STYLE - FLOATING CENTERED PILL) */}
+      {/* POPULAR LOCATIONS BAR DIRECTLY UNDER NAVBAR */}
+      <div className="relative z-30 bg-white border-b border-[#e8e0d3] shadow-xs">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex flex-wrap items-center justify-center sm:justify-start gap-2 text-xs sm:text-sm">
+          <span className="font-extrabold text-[#0b2545] mr-1 flex items-center gap-1.5">
+            <span style={{ color: '#FF9A1F', fontSize: '14px' }}>📍</span>
+            <span>Popular Locations:</span>
+          </span>
+          {['Rajpur Sonarpur', 'Jadavpur', 'Garia', 'Salt Lake', 'New Town'].map((loc) => (
+            <button
+              key={loc}
+              type="button"
+              onClick={() => {
+                setSelectedCity(loc);
+                setSearchQuery(loc);
+                showToast(`Filtered listings for ${loc}`);
+                scrollToListings();
+              }}
+              className="px-3.5 py-1 rounded-full bg-[#f6f1e7] hover:bg-[#FF9A1F] hover:text-white text-[#0b2545] font-semibold border border-[#d8cba9] transition cursor-pointer"
+            >
+              {loc}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* STICKY SEARCH BAR ON SCROLL */}
       <div
         className={`pk-sticky-search-bar ${isSearchSticky ? 'is-sticky' : ''}`}
         aria-hidden={!isSearchSticky}
       >
         <div className="pk-sticky-inner">
-          {/* Search Icon */}
-          <span className="pk-sticky-icon">
-            <svg
-              width="19"
-              height="19"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.4"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-          </span>
-
-          {/* Search Input Box */}
+          <span className="pk-sticky-icon">🔍</span>
           <input
             type="text"
             className="pk-sticky-input"
@@ -2132,7 +2147,6 @@ export default function TenantHome() {
             </button>
           )}
 
-          {/* Category Filter Pills */}
           <div className="pk-sticky-cat-pills">
             {['All', 'Flats', 'Rooms', 'PG'].map((cat) => (
               <button
@@ -2149,7 +2163,6 @@ export default function TenantHome() {
             ))}
           </div>
 
-          {/* Search Action Button */}
           <button
             type="button"
             className="pk-sticky-submit-btn"
@@ -2161,149 +2174,117 @@ export default function TenantHome() {
         </div>
       </div>
 
-      {/* HERO SECTION WITH REAL ARCHITECTURAL HOUSE REEL & KEN BURNS MOTION */}
-      <section className="pk-hero-root" id="top">
-        {HERO_SLIDES.map((url, idx) => (
-          <div
-            key={idx}
-            className={`hero-slide-layer ${idx === currentSlide ? 'active' : ''} ken-burns`}
-            style={{ backgroundImage: `url('${url}')` }}
-          />
-        ))}
-        <div className="hero-vignette" />
-
-        {/* Video Reel Slide Indicator Controls */}
-        <div className="pk-reel-controls">
-          <div className="pk-reel-dots">
-            {HERO_SLIDES.map((_, i) => (
-              <span
-                key={i}
-                className={`pk-dot ${i === currentSlide ? 'active' : ''}`}
-                onClick={() => setCurrentSlide(i)}
-                title={`Slide ${i + 1}`}
-              />
-            ))}
-          </div>
+      {/* ==================== 2. HERO SECTION WITH 7-IMAGE LOOPING SLIDESHOW ==================== */}
+      <section id="top" className="relative overflow-hidden bg-[#0b2545] flex min-h-[540px] sm:min-h-[620px]">
+        {/* Animated background slideshow (7 images, looping) */}
+        <div className="hero-bg" aria-hidden="true">
+          <div className="hero-slide" style={{ backgroundImage: "url('/assets/images/hero-slide-1.jpg')" }} />
+          <div className="hero-slide" style={{ backgroundImage: "url('/assets/images/hero-slide-2.jpg')" }} />
+          <div className="hero-slide" style={{ backgroundImage: "url('/assets/images/hero-slide-3.jpg')" }} />
+          <div className="hero-slide" style={{ backgroundImage: "url('/assets/images/hero-slide-4.jpg')" }} />
+          <div className="hero-slide" style={{ backgroundImage: "url('/assets/images/hero-slide-5.jpg')" }} />
+          <div className="hero-slide" style={{ backgroundImage: "url('/assets/images/hero-slide-6.jpg')" }} />
+          <div className="hero-slide" style={{ backgroundImage: "url('/assets/images/hero-slide-7.jpg')" }} />
         </div>
+        <div className="hero-overlay" />
 
-        {/* Hero Text & Search Box */}
-        <div className="pk-hero-content">
-          <h1 className="pk-hero-title">
-            Find a home that feels <span>right.</span>
-          </h1>
+        <div className="relative w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 flex flex-col justify-center gap-6 sm:gap-7 min-h-[540px] sm:min-h-[620px] z-10">
+          <div className="text-center max-w-3xl mx-auto">
+            <h1 className="hero-text-shadow text-3xl sm:text-5xl font-extrabold text-white tracking-tight leading-tight">
+              Find Direct <span className="hero-word">Flats</span>, <span className="hero-word">PGs</span> &amp; <span className="hero-word">Rooms</span> — Zero Brokerage
+            </h1>
+            <p className="hero-text-shadow text-white/95 text-sm sm:text-base mt-3 max-w-2xl mx-auto leading-relaxed">
+              Settled in? Book doorstep home services too: 20L water jars, homemade tiffin, laundry pickup, room cleaning, electrician/plumber and Wi-Fi setup, all from one place.
+            </p>
+          </div>
 
-          <p className="pk-hero-subtitle">
-            More than a rental search platform — find verified properties, get everyday home
-            services, manage your expenses, and rent with confidence.
-          </p>
-
-          {/* Search Bar Card */}
-          <div className="pk-searchbar-card">
-            <span className="pk-search-icon">
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-            </span>
-            <input
-              type="text"
-              className="pk-search-input"
-              placeholder="Search area, locality, landmark or property type (Flats, Rooms, PG)..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && scrollToListings()}
-            />
-            {searchQuery && (
+          {/* Hero Search Box */}
+          <div className="max-w-3xl w-full mx-auto bg-white rounded-2xl shadow-2xl border border-white/80 p-2.5 sm:p-3">
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1 min-w-0">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">🔍</span>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && scrollToListings()}
+                  placeholder="Search area, locality, landmark or property (e.g. Salt Lake, Flats)..."
+                  className="w-full bg-[#f6f1e7] border border-transparent rounded-xl pl-11 pr-3.5 py-3 sm:py-3.5 text-sm sm:text-base text-[#0b2545] placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#FF9A1F]"
+                />
+              </div>
               <button
                 type="button"
-                className="pk-clear-btn"
-                onClick={() => setSearchQuery('')}
-                title="Clear Search"
+                onClick={scrollToListings}
+                className="shrink-0 bg-[#FF9A1F] hover:bg-[#ea580c] text-white font-extrabold py-3 sm:py-3.5 px-6 sm:px-8 rounded-xl transition active:scale-95 shadow-md flex items-center gap-1.5 cursor-pointer text-sm sm:text-base"
               >
-                ✕
+                <span>Search</span>
+                <span>→</span>
               </button>
-            )}
-            <button type="button" className="pk-search-submit" onClick={scrollToListings}>
-              <span>Search Homes</span>
-              <span style={{ color: '#fed7aa' }}>→</span>
-            </button>
+            </div>
           </div>
 
-          {/* Category Filter Pills: All Homes, Flats, Rooms, PG */}
-          <div className="pk-cat-pills">
+          {/* Quick Category Buttons */}
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 -mt-1">
             <button
               type="button"
-              className={`pk-pill-btn ${selectedCategory === 'All' ? 'active' : ''}`}
               onClick={() => {
                 setSelectedCategory('All');
+                setSearchQuery('');
                 scrollToListings();
               }}
+              className={`min-w-[96px] px-5 py-2.5 rounded-full font-extrabold text-sm border shadow-lg transition hover:-translate-y-0.5 cursor-pointer flex items-center justify-center gap-1.5 ${
+                selectedCategory === 'All'
+                  ? 'bg-[#FF9A1F] text-white border-[#FF9A1F]'
+                  : 'bg-white/95 hover:bg-white text-[#0b2545] border-white'
+              }`}
             >
-              <span>✨</span>
-              <span>All Homes</span>
+              <span>✨ All</span>
             </button>
             <button
               type="button"
-              className={`pk-pill-btn ${selectedCategory === 'Flats' ? 'active' : ''}`}
               onClick={() => {
                 setSelectedCategory('Flats');
                 scrollToListings();
               }}
+              className={`min-w-[96px] px-5 py-2.5 rounded-full font-extrabold text-sm border shadow-lg transition hover:-translate-y-0.5 cursor-pointer flex items-center justify-center gap-1.5 ${
+                selectedCategory === 'Flats'
+                  ? 'bg-[#FF9A1F] text-white border-[#FF9A1F]'
+                  : 'bg-white/95 hover:bg-white text-[#0b2545] border-white'
+              }`}
             >
-              <span>🏢</span>
+              <span className="text-[#ea580c]">🏢</span>
               <span>Flats</span>
             </button>
             <button
               type="button"
-              className={`pk-pill-btn ${selectedCategory === 'Rooms' ? 'active' : ''}`}
-              onClick={() => {
-                setSelectedCategory('Rooms');
-                scrollToListings();
-              }}
-            >
-              <span>🛋️</span>
-              <span>Rooms</span>
-            </button>
-            <button
-              type="button"
-              className={`pk-pill-btn ${selectedCategory === 'PG' ? 'active' : ''}`}
               onClick={() => {
                 setSelectedCategory('PG');
                 scrollToListings();
               }}
+              className={`min-w-[96px] px-5 py-2.5 rounded-full font-extrabold text-sm border shadow-lg transition hover:-translate-y-0.5 cursor-pointer flex items-center justify-center gap-1.5 ${
+                selectedCategory === 'PG'
+                  ? 'bg-[#FF9A1F] text-white border-[#FF9A1F]'
+                  : 'bg-white/95 hover:bg-white text-[#0b2545] border-white'
+              }`}
             >
-              <span>🛏️</span>
-              <span>PG</span>
+              <span className="text-[#ea580c]">🛏️</span>
+              <span>PGs</span>
             </button>
-          </div>
-
-          {/* Quick Popular Area Links (সরাসরি পিল হিসেবে অটোমেটিক দেখাবে, কোনো লেবেল ছাড়া) */}
-          <div className="pk-hero-locations">
-            {(selectedCity && (selectedCity.toLowerCase().includes('medinipur') || selectedCity.toLowerCase().includes('midnapore'))
-              ? ['Tamluk', 'Haldia', 'Digha', 'Contai', 'Kolaghat', 'Mecheda', 'Mahishadal', 'Panskura']
-              : ['Salt Lake', 'New Town', 'Rajarhat', 'Ballygunge', 'Garia', 'Jadavpur', 'Behala', 'Howrah']
-            ).map((loc) => (
-              <button
-                key={loc}
-                type="button"
-                className="pk-loc-link"
-                onClick={() => {
-                  setSearchQuery(loc);
-                  scrollToListings();
-                }}
-              >
-                {loc}
-              </button>
-            ))}
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedCategory('Rooms');
+                scrollToListings();
+              }}
+              className={`min-w-[96px] px-5 py-2.5 rounded-full font-extrabold text-sm border shadow-lg transition hover:-translate-y-0.5 cursor-pointer flex items-center justify-center gap-1.5 ${
+                selectedCategory === 'Rooms'
+                  ? 'bg-[#FF9A1F] text-white border-[#FF9A1F]'
+                  : 'bg-white/95 hover:bg-white text-[#0b2545] border-white'
+              }`}
+            >
+              <span className="text-[#ea580c]">🚪</span>
+              <span>Rooms</span>
+            </button>
           </div>
         </div>
       </section>

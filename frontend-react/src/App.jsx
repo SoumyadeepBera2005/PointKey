@@ -1,7 +1,6 @@
 import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 
-import Maintenance from './pages/Maintenance';
 import Splash from './pages/auth/Splash';
 import Onboarding from './pages/auth/Onboarding';
 import RoleSelection from './pages/auth/RoleSelection';
@@ -27,13 +26,6 @@ import ManageTenants from './pages/admin/ManageTenants';
 import ManageOwners from './pages/admin/ManageOwners';
 import AdminProfile from './pages/admin/AdminProfile';
 
-// =========================================================================
-// POINTKEY MAINTENANCE MODE CONFIGURATION
-// Set to true to display the Maintenance Screen across the website.
-// Set to false to restore normal website access.
-// =========================================================================
-export const IS_MAINTENANCE_MODE = true;
-
 function RequireRole({ roles }) {
   const { user } = useAuth();
   const location = useLocation();
@@ -51,23 +43,8 @@ function HomeRedirect() {
 }
 
 export default function App() {
-  const location = useLocation();
-  const { user } = useAuth();
-
-  // Allow admin routes, logged-in admins, or developer session bypass to view the site
-  const isAdminRoute = location.pathname.startsWith('/admin');
-  const isBypassed =
-    (user && user.role === 'ADMIN') ||
-    new URLSearchParams(location.search).get('bypass') === 'true' ||
-    sessionStorage.getItem('pk_maintenance_bypass') === 'true';
-
-  if (IS_MAINTENANCE_MODE && !isAdminRoute && !isBypassed) {
-    return <Maintenance />;
-  }
-
   return (
     <Routes>
-      <Route path="/maintenance" element={<Maintenance />} />
       <Route path="/" element={<HomeRedirect />} />
       <Route path="/splash" element={<Splash />} />
       <Route path="/onboarding" element={<Onboarding />} />

@@ -133,15 +133,15 @@ export function AuthProvider({ children }) {
     return () => clearInterval(interval);
   }, []);
 
-  // Step 1: email + mobile + password → backend sends OTP to the email.
-  const login = useCallback(async (email, phone, password, role) => {
+  // Step 1: email + mobile → backend sends OTP to the email (passwordless like OYO & Blinkit).
+  const login = useCallback(async (email, phone, password = null, role = null) => {
     const { data } = await api.post('/auth/login', { email, phone, password, role });
     return data;
   }, []);
 
   // Step 2: verify the email OTP → persists the session, returns the user.
-  const verifyLoginOtp = useCallback(async (email, code, role) => {
-    const { data } = await api.post('/auth/verify-login-otp', { email, code, role });
+  const verifyLoginOtp = useCallback(async (email, code, phone = null, role = null) => {
+    const { data } = await api.post('/auth/verify-login-otp', { email, code, phone, role });
     persist(data.token, data.user);
     return data.user;
   }, [persist]);

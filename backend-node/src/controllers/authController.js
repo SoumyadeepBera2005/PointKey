@@ -284,45 +284,48 @@ async function signup(req, res, next) {
 
 /**
  * =============================================================================
- * POST /api/v1/auth/login (ধাপ ১)
+ * POST /api/v1/auth/login (ধাপ ১ - OYO & Blinkit style passwordless login)
  * =============================================================================
- * ১. ইউজার যে ইমেইল ও মোবাইল নম্বর দিয়েছে, তা একই অ্যাকাউন্টের কি না যাচাই করে।
- * ২. পাসওয়ার্ড যাচাই করে।
- * ৩. পাসওয়ার্ড সঠিক হলে অ্যাকাউন্টের আসল ইমেইলে ৬-ডিজিটের ওটিপি পাঠায় (Brevo দিয়ে)।
+ * ১. ইউজার শুধুমাত্র ইমেইল ও মোবাইল নম্বর দিয়ে লগইন/সাইনআপ রিকোয়েস্ট করবে।
+ * ২. কোনো পাসওয়ার্ডের প্রয়োজন নেই।
+ * ৩. ইউজারের ইমেইলে ৬-ডিজিটের ওটিপি পাঠায় (Brevo / Resend / fallback)।
  * ৪. ক্যাশ বা রেডিসে ওটিপি ৬০ সেকেন্ডের জন্য সংরক্ষণ করে।
  */
 async function login(req, res, next) {
   try {
     const { email, phone, password, role } = req.body;
-    if (!password || !email || !phone) {
-      return res.status(400).json({ message: 'Email, mobile number and password are required' });
+    if (!email || !phone) {
+      return res.status(400).json({ message: 'Email and mobile number are required' });
     }
     const normalizedPhone = normalizePhone(phone);
     const normalizedEmail = String(email).trim().toLowerCase();
 
-    const [[user]] = await db.query('SELECT * FROM users WHERE email = ? LIMIT 1', [normalizedEmail]);
-    if (!user) return res.status(401).json({ message: 'Invalid credentials' });
-    // The mobile number must match the account tied to this email (Rapido-style
-    // pair identity — the phone itself is not verified, never has to be).
-    if (normalizePhone(user.phone) !== normalizedPhone) {
-      return res.status(400).json({ message: 'Email and mobile number do not match our records' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(normalizedEmail)) {
+      return res.status(400).json({ message: 'Enter a valid email address' });
     }
-    if (user.account_status === 'BLOCKED') return res.status(403).json({ message: 'Account blocked. Contact support.' });
-    if (user.account_status === 'DELETED') return res.status(403).json({ message: 'Account deleted.' });
+    if (normalizedPhone.length !== 10) {
+      return res.status(400).json({ message: 'Enter a valid 10-digit mobile number' });
+    }
 
-    const ok = await bcrypt.compare(String(password), user.password_hash);
-    if (!ok) return res.status(401).json({ message: 'Invalid credentials' });
+    const [[existingUser]] = await db.query('SELECT * FROM users WHERE email = ? LIMIT 1', [normalizedEmail]);
+    if (existingUser) {
+      if (existingUser.account_status === 'BLOCKED') return res.status(403).json({ message: 'Account blocked. Contact support.' });
+      if (existingUser.account_status === 'DELETED') return res.status(403).json({ message: 'Account deleted.' });
 
-    // Role isolation: if a role was requested, it must match the account
-    if (role && String(role).toUpperCase() !== user.role) {
-      return res.status(403).json({ message: `This account is registered as ${user.role}` });
+      // If password was explicitly provided, verify it (for backward compatibility)
+      if (password) {
+        const ok = await bcrypt.compare(String(password), existingUser.password_hash);
+        if (!ok) return res.status(401).json({ message: 'Invalid credentials' });
+      }
     }
 
     const code = generateOtp();
     await cacheSet(`otp:email:${normalizedEmail}`, code, OTP_TTL);
+    await cacheSet(`otp:phone:${normalizedEmail}`, normalizedPhone, OTP_TTL);
+
     let emailSent = false;
     try {
-      await deliverEmailOtp(user.email, code);
+      await deliverEmailOtp(normalizedEmail, code);
       emailSent = true;
     } catch (e) {
       console.warn(`[AUTH] Email sending failed: ${e.message}`);
@@ -331,9 +334,9 @@ async function login(req, res, next) {
     return res.json({
       otp_required: true,
       message: emailSent
-        ? `OTP sent to ${maskEmail(user.email)}`
+        ? `OTP sent to ${maskEmail(normalizedEmail)}`
         : `Email delivery failed. Verification code: ${code}`,
-      email: maskEmail(user.email),
+      email: maskEmail(normalizedEmail),
       ...(emailSent ? {} : { dev_otp: code }),
     });
   } catch (e) { next(e); }
@@ -341,15 +344,16 @@ async function login(req, res, next) {
 
 /**
  * =============================================================================
- * POST /api/v1/auth/verify-login-otp (ধাপ ২)
+ * POST /api/v1/auth/verify-login-otp (ধাপ ২ - OYO & Blinkit style OTP verification)
  * =============================================================================
- * ১. ইউজার ফর্ম থেকে যে ৬ ডিজিটের কোড পাঠিয়েছে, তা ক্যাশে থাকা ওটিপির সাথে মিলিয়ে দেখে।
- * ২. ওটিপি সঠিক ও মেয়াদ (৬০ সেকেন্ডের) মধ্যে থাকলে তা ব্যবহার হয়ে যাওয়ার পর ক্যাশ থেকে মুছে দেয়।
- * ৩. ইউজারের জন্য সিকিউর JWT টোকেন ইস্যু করে যাতে ইউজার সরাসরি প্ল্যাটফর্মে লগইন করতে পারে।
+ * ১. ইউজার ফর্ম থেকে পাঠানো ৬-ডিজিটের কোড ক্যাশের সাথে যাচাই করে।
+ * ২. ইউজার যদি নতুন হয়, স্বয়ংক্রিয়ভাবে পয়েন্টকি অ্যাকাউন্ট তৈরি হয়ে যাবে (No password needed)।
+ * ৩. ইউজার যদি পুরাতন হয়, সরাসরি পয়েন্টকিতে লগইন সম্পন্ন হবে।
+ * ৪. সিকিউর JWT টোকেন ইস্যু করে।
  */
 async function verifyLoginOtp(req, res, next) {
   try {
-    const { email, code, role } = req.body;
+    const { email, code, phone, role } = req.body;
     if (!email || !code) return res.status(400).json({ message: 'email and code are required' });
     const normalizedEmail = String(email).trim().toLowerCase();
 
@@ -359,13 +363,34 @@ async function verifyLoginOtp(req, res, next) {
     }
     await cacheDel(`otp:email:${normalizedEmail}`);
 
-    const [[user]] = await db.query('SELECT * FROM users WHERE email = ? LIMIT 1', [normalizedEmail]);
-    if (!user) return res.status(401).json({ message: 'Account not found' });
-    if (user.account_status === 'BLOCKED') return res.status(403).json({ message: 'Account blocked. Contact support.' });
-    if (user.account_status === 'DELETED') return res.status(403).json({ message: 'Account deleted.' });
-    if (role && String(role).toUpperCase() !== user.role) {
-      return res.status(403).json({ message: `This account is registered as ${user.role}` });
+    const cachedPhone = await cacheGet(`otp:phone:${normalizedEmail}`);
+    await cacheDel(`otp:phone:${normalizedEmail}`);
+    const normalizedPhone = phone ? normalizePhone(phone) : (cachedPhone || '0000000000');
+
+    let [[user]] = await db.query('SELECT * FROM users WHERE email = ? LIMIT 1', [normalizedEmail]);
+
+    // OYO & Blinkit style: if user does not exist yet, seamlessly auto-create account
+    if (!user) {
+      const randomPassword = `otp_${Date.now()}_${Math.random()}`;
+      const hash = await bcrypt.hash(randomPassword, 10);
+      const defaultName = `User ${normalizedPhone.slice(-4)}`;
+      const targetRole = (role && String(role).toUpperCase() === 'OWNER') ? 'OWNER' : 'TENANT';
+      
+      await db.query(
+        `INSERT INTO users (full_name, email, phone, password_hash, role)
+         VALUES (?, ?, ?, ?, ?)`,
+        [defaultName, normalizedEmail, normalizedPhone, hash, targetRole]
+      );
+      [[user]] = await db.query('SELECT * FROM users WHERE email = ? LIMIT 1', [normalizedEmail]);
+    } else {
+      if (user.account_status === 'BLOCKED') return res.status(403).json({ message: 'Account blocked. Contact support.' });
+      if (user.account_status === 'DELETED') return res.status(403).json({ message: 'Account deleted.' });
+      if (normalizedPhone && normalizedPhone.length === 10 && normalizePhone(user.phone) !== normalizedPhone) {
+        await db.query('UPDATE users SET phone = ? WHERE id = ?', [normalizedPhone, user.id]);
+        user.phone = normalizedPhone;
+      }
     }
+
     return res.json({ token: signToken(user), user: publicUser(user) });
   } catch (e) { next(e); }
 }

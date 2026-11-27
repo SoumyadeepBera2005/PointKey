@@ -320,6 +320,38 @@ export default function TenantHome() {
   const [sortOption, setSortOption] = useState('featured');
   const [isSearchSticky, setIsSearchSticky] = useState(false);
 
+  // Typewriter placeholder animation matching prototype video
+  const SEARCH_WORDS = useMemo(() => ['Flats', 'Rooms', 'PGs', 'Locker', 'Facilities'], []);
+  const [typewriterPlaceholder, setTypewriterPlaceholder] = useState('Flats');
+
+  useEffect(() => {
+    let wordIdx = 0;
+    let charIdx = 0;
+    let isDeleting = false;
+    let timerId = null;
+
+    const typeNext = () => {
+      const currentWord = SEARCH_WORDS[wordIdx];
+      charIdx += isDeleting ? -1 : 1;
+      setTypewriterPlaceholder(currentWord.slice(0, Math.max(0, charIdx)));
+
+      let delay = isDeleting ? 75 : 125;
+      if (!isDeleting && charIdx >= currentWord.length) {
+        delay = 1100;
+        isDeleting = true;
+      } else if (isDeleting && charIdx <= 0) {
+        isDeleting = false;
+        wordIdx = (wordIdx + 1) % SEARCH_WORDS.length;
+        delay = 350;
+      }
+
+      timerId = setTimeout(typeNext, delay);
+    };
+
+    timerId = setTimeout(typeNext, 450);
+    return () => clearTimeout(timerId);
+  }, [SEARCH_WORDS]);
+
   // Hero Reel Motion state
   const [currentSlide, setCurrentSlide] = useState(0);
   const [reelPlaying, setReelPlaying] = useState(true);
@@ -836,12 +868,16 @@ export default function TenantHome() {
           outline: none;
           background: transparent;
           font-size: 15px;
-          color: #111827;
+          font-weight: 700;
+          color: #13315C;
           font-family: inherit;
         }
 
         .pk-search-input::placeholder {
-          color: #9ca3af;
+          color: #13315C !important;
+          opacity: 1 !important;
+          font-weight: 700 !important;
+          letter-spacing: 0.01em !important;
         }
 
         .pk-clear-btn {
@@ -1025,15 +1061,17 @@ export default function TenantHome() {
           border: none;
           outline: none;
           font-size: 14.5px;
-          font-weight: 500;
-          color: #0b2545;
+          font-weight: 700;
+          color: #13315C;
           min-width: 0;
           font-family: inherit;
         }
 
         .pk-search-input::placeholder {
-          color: #64748b;
-          font-weight: 400;
+          color: #13315C !important;
+          opacity: 1 !important;
+          font-weight: 700 !important;
+          letter-spacing: 0.01em !important;
         }
 
         .pk-clear-btn {
@@ -1059,12 +1097,12 @@ export default function TenantHome() {
 
         .pk-search-btn {
           height: 48px;
-          padding: 0 26px;
-          background: #FF9A1F;
-          color: #ffffff;
+          padding: 0 24px;
+          background: #ea7a24;
+          color: #0b2545;
           border: none;
-          border-radius: 14px;
-          font-size: 15px;
+          border-radius: 12px;
+          font-size: 14.5px;
           font-weight: 800;
           display: flex;
           align-items: center;
@@ -1072,11 +1110,14 @@ export default function TenantHome() {
           cursor: pointer;
           flex-shrink: 0;
           transition: all 0.18s ease;
-          box-shadow: 0 4px 14px rgba(255, 154, 31, 0.35);
+          box-shadow: 0 4px 14px rgba(234, 122, 36, 0.35);
           white-space: nowrap;
         }
 
         .pk-search-btn:hover {
+          background: #d86815;
+          transform: scale(1.02);
+        }
           background: #ea580c;
           transform: translateY(-1px);
           box-shadow: 0 6px 18px rgba(234, 88, 12, 0.45);
@@ -2163,7 +2204,7 @@ export default function TenantHome() {
             <input
               type="text"
               className="pk-search-input"
-              placeholder="Search area, locality, landmark or property (e.g. Salt Lake, Flats)..."
+              placeholder={searchQuery ? '' : typewriterPlaceholder}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && scrollToListings()}
@@ -2185,8 +2226,8 @@ export default function TenantHome() {
             className="pk-search-btn"
             onClick={scrollToListings}
           >
+            <i className="fa-solid fa-magnifying-glass text-xs mr-1"></i>
             <span>Search</span>
-            <span>→</span>
           </button>
         </div>
       </div>
@@ -2226,7 +2267,7 @@ export default function TenantHome() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && scrollToListings()}
-                  placeholder="Search area, locality, landmark or property (e.g. Salt Lake, Flats)..."
+                  placeholder={searchQuery ? '' : typewriterPlaceholder}
                 />
                 {searchQuery && (
                   <button
@@ -2244,8 +2285,8 @@ export default function TenantHome() {
                 onClick={scrollToListings}
                 className="pk-search-btn"
               >
+                <i className="fa-solid fa-magnifying-glass text-xs mr-1"></i>
                 <span>Search</span>
-                <span>→</span>
               </button>
             </div>
           </div>

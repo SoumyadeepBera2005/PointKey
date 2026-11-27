@@ -345,72 +345,84 @@ export default function FacilitiesCarousel({ onAddToCart, onOpenDrawer }) {
             if (srv.category === 'emergency') {
               return (
                 <div
-                  key={srv.id}
-                  className="srv-card srv-card-emg srv-cat-emergency bg-white border border-rose-200 rounded-2xl p-5 flex flex-col justify-between shadow-xs transition hover:shadow-lg"
+                  key={`${selectedFilter}-${srv.id}`}
+                  style={{ '--i': idx }}
+                  className="srv-card srv-card-emg srv-cat-emergency marketplace-card rounded-2xl p-5 flex flex-col justify-between shadow-xs transition hover:shadow-lg"
                 >
                   <div>
-                    <div className="srv-icon w-11 h-11 rounded-xl bg-rose-600 text-white flex items-center justify-center text-lg mb-3 shadow-xs">
-                      <i className={`fa-solid ${srv.icon}`}></i>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-base font-extrabold text-[#0B2545]">{srv.title}</h4>
-                      <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[10px] font-black uppercase">
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <div className="srv-icon w-11 h-11 rounded-xl bg-[#0B2545] text-white flex items-center justify-center text-lg shadow-xs">
+                        <i className={`fa-solid ${srv.icon}`}></i>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-full text-[10.5px] font-extrabold bg-rose-100 text-rose-700 uppercase">
                         Emergency
                       </span>
                     </div>
-                    <p className="text-xs text-slate-600 mt-2 leading-relaxed">{srv.desc}</p>
+
+                    <h4 className="text-base font-black text-[#0B2545]">{srv.title}</h4>
+                    <p className="text-[12px] font-bold text-rose-700 mt-0.5">
+                      {srv.subtitle || 'Free 24x7 Helpline'}
+                    </p>
+                    <p className="text-xs text-slate-600 mt-2 leading-relaxed line-clamp-2">{srv.desc}</p>
                   </div>
-                  <a
-                    href={`tel:${srv.call}`}
-                    className="mt-5 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold shadow-sm transition"
-                  >
-                    <i className="fa-solid fa-phone"></i>
-                    <span>Call {srv.callLabel} (Free 24x7)</span>
-                  </a>
+
+                  <div className="mt-5 pt-3 border-t border-[#D6CCB4]/60 flex items-center justify-between gap-2">
+                    <div className="text-[11px] font-bold text-slate-600 flex items-center gap-1.5">
+                      <i className="fa-solid fa-headset text-rose-600"></i>
+                      <span>24x7 Emergency Help</span>
+                    </div>
+                    <a
+                      href={`tel:${srv.call}`}
+                      className="srv-addbtn px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black shadow-xs transition inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                    >
+                      <i className="fa-solid fa-phone text-xs"></i>
+                      <span>Call {srv.callLabel}</span>
+                    </a>
+                  </div>
                 </div>
               );
             }
 
             return (
               <div
-                key={srv.id}
-                className={`srv-card srv-cat-${cat.key} bg-white rounded-2xl p-5 flex flex-col justify-between shadow-xs transition hover:shadow-lg`}
+                key={`${selectedFilter}-${srv.id}`}
+                style={{ '--i': idx }}
+                className={`srv-card srv-cat-${cat.key} marketplace-card rounded-2xl p-5 flex flex-col justify-between shadow-xs transition hover:shadow-lg`}
               >
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-3">
-                    <div
-                      className="srv-icon w-11 h-11 rounded-xl flex items-center justify-center text-lg shadow-xs"
-                      style={{ background: cat.accent, color: '#fff' }}
-                    >
+                    <div className="srv-icon w-11 h-11 rounded-xl bg-[#0B2545] text-white flex items-center justify-center text-lg shadow-xs">
                       <i className={`fa-solid ${srv.icon}`}></i>
                     </div>
-                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${cat.badgeCls}`}>
-                      {cat.short}
+                    <span className="px-2.5 py-1 rounded-full text-[10.5px] font-extrabold bg-[#E5DFD1] text-[#0B2545]">
+                      {cat.name || cat.short}
                     </span>
                   </div>
 
-                  <h4 className="text-base font-extrabold text-[#0B2545]">{srv.title}</h4>
-                  <p className="srv-sub text-[11px] font-bold mt-0.5" style={{ color: cat.accent }}>
+                  <h4 className="text-base font-black text-[#0B2545]">{srv.title}</h4>
+                  <p className="text-[12px] font-bold text-[#0B2545] mt-0.5">
                     {srv.subtitle}
                   </p>
-                  <p className="text-xs text-slate-600 mt-2 leading-relaxed">{srv.desc}</p>
+                  <p className="text-xs text-slate-600 mt-2 leading-relaxed line-clamp-2">{srv.desc}</p>
                 </div>
 
-                <div className="mt-5 pt-3 border-t border-slate-200/80 flex items-center justify-between">
-                  <div>
-                    <span className="text-sm font-black text-[#0B2545]">₹{srv.price}</span>
-                    <span className="text-[10px] text-slate-500 font-bold ml-1">{srv.unit}</span>
+                <div className="mt-5 pt-3 border-t border-[#D6CCB4]/60 flex items-center justify-between gap-2">
+                  <div className="text-[11px] font-bold text-slate-600 flex items-center gap-1.5">
+                    <i className="fa-solid fa-user-check text-[#0B2545]"></i>
+                    <span>Provider details after booking</span>
                   </div>
 
                   <button
                     type="button"
                     onClick={() => handleAdd(srv)}
-                    className={`srv-addbtn px-3.5 py-2 rounded-xl text-white text-xs font-extrabold flex items-center gap-1.5 shadow-xs transition cursor-pointer ${
-                      isAdded ? 'srv-added bg-[#166534]' : 'bg-[#0B2545] hover:bg-[#E85D04]'
+                    className={`srv-addbtn px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-xs transition cursor-pointer whitespace-nowrap ${
+                      isAdded
+                        ? 'srv-added bg-[#1B4332] text-white'
+                        : 'bg-[#E07A2B] hover:bg-[#cf6b1f] text-[#0B2545]'
                     }`}
                   >
-                    <i className={`fa-solid ${isAdded ? 'fa-check' : 'fa-cart-plus'}`}></i>
-                    <span>{isAdded ? 'Added' : 'Add to Bag'}</span>
+                    <i className={`fa-solid ${isAdded ? 'fa-check' : 'fa-cart-plus'} text-xs`}></i>
+                    <span>{isAdded ? 'Added' : 'Add to Cart'}</span>
                   </button>
                 </div>
               </div>

@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import { getSocket } from '../../services/socket';
 import PostPropertyModal from '../modals/PostPropertyModal';
+import MyPropertiesModal from '../modals/MyPropertiesModal';
 import ServiceDrawer from '../modals/ServiceDrawer';
 
 function getRecentLocationsStorageKey(currentUser) {
@@ -35,6 +36,7 @@ export default function Navbar({
 
   // Modals & Drawers state
   const [showPostPropertyModal, setShowPostPropertyModal] = useState(false);
+  const [showMyPropertiesModal, setShowMyPropertiesModal] = useState(false);
   const [showServiceDrawer, setShowServiceDrawer] = useState(false);
   const [serviceCartCount, setServiceCartCount] = useState(() => {
     try {
@@ -1366,6 +1368,17 @@ export default function Navbar({
                       style={{ padding: '8px 12px', borderRadius: '8px' }}
                       onClick={() => {
                         setProfileOpen(false);
+                        setShowMyPropertiesModal(true);
+                      }}
+                    >
+                      🏠 My Properties
+                    </button>
+                    <button
+                      type="button"
+                      className="nav-mega-btn"
+                      style={{ padding: '8px 12px', borderRadius: '8px' }}
+                      onClick={() => {
+                        setProfileOpen(false);
                         setActiveModal('history');
                       }}
                     >
@@ -1403,7 +1416,7 @@ export default function Navbar({
             ) : (
               <button
                 type="button"
-                onClick={() => openAuthModal?.('login', 'tenant')}
+                onClick={() => openAuthModal?.('input', 'tenant')}
                 className="pk-login-btn"
                 title="Log in or Sign up"
               >
@@ -1497,7 +1510,7 @@ export default function Navbar({
                   if (user) {
                     navigate('/tenant/profile');
                   } else {
-                    openAuthModal?.('login', 'tenant');
+                    openAuthModal?.('input', 'tenant');
                   }
                 }}
                 className="pk-post-btn"
@@ -1515,6 +1528,13 @@ export default function Navbar({
         isOpen={showPostPropertyModal}
         onClose={() => setShowPostPropertyModal(false)}
         onSuccess={() => setShowPostPropertyModal(false)}
+      />
+
+      {/* MY PROPERTIES & REAL-TIME VERIFICATION TRACKER MODAL */}
+      <MyPropertiesModal
+        isOpen={showMyPropertiesModal}
+        onClose={() => setShowMyPropertiesModal(false)}
+        onOpenPostProperty={() => setShowPostPropertyModal(true)}
       />
 
       {/* SERVICE CART DRAWER */}

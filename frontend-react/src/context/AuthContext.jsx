@@ -13,12 +13,12 @@ export function AuthProvider({ children }) {
   // Global Auth Modal state
   const [authModalState, setAuthModalState] = useState({
     isOpen: false,
-    mode: 'login',
+    mode: 'input',
     role: 'tenant',
     promptMessage: '',
   });
 
-  const openAuthModal = useCallback((mode = 'login', role = 'tenant', promptMessage = '') => {
+  const openAuthModal = useCallback((mode = 'input', role = 'tenant', promptMessage = '') => {
     setAuthModalState({ isOpen: true, mode, role, promptMessage });
   }, []);
 

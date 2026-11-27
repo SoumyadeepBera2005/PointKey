@@ -280,7 +280,7 @@ export default function TenantHome() {
       localStorage.setItem('prent_service_cart', JSON.stringify(currentCart));
       window.dispatchEvent(new Event('prent_cart_updated'));
       showToast(`🛒 Added ${srv.title} to FacilityKart bag!`);
-    } catch {}
+    } catch { }
   };
 
   const handlePersonaSelect = (persona) => {
@@ -545,13 +545,36 @@ export default function TenantHome() {
     window.dispatchEvent(new Event('prent_fav_change'));
   };
 
-  // Combined property pool: dynamic verified properties for selected city + backend properties + sample properties
+  // Real-time synchronization of Admin-verified custom owner/builder listings
+  const [verifiedCustomProps, setVerifiedCustomProps] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('prent_verified_admin_properties') || '[]');
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    const syncVerified = () => {
+      try {
+        setVerifiedCustomProps(JSON.parse(localStorage.getItem('prent_verified_admin_properties') || '[]'));
+      } catch {}
+    };
+    window.addEventListener('prent_property_verified', syncVerified);
+    window.addEventListener('storage', syncVerified);
+    return () => {
+      window.removeEventListener('prent_property_verified', syncVerified);
+      window.removeEventListener('storage', syncVerified);
+    };
+  }, []);
+
+  // Combined property pool: admin verified custom properties + dynamic verified properties for selected city + backend properties + sample properties
   const allProperties = useMemo(() => {
     const dynamicProps = selectedCity && selectedCity !== 'All Cities' && selectedCity !== 'All'
       ? generateDynamicCityProperties(selectedCity)
       : [];
-    return [...dynamicProps, ...properties];
-  }, [selectedCity, properties]);
+    return [...verifiedCustomProps, ...dynamicProps, ...properties];
+  }, [selectedCity, properties, verifiedCustomProps]);
 
   // Filter properties
   const filteredListings = allProperties.filter((prop) => {
@@ -1123,54 +1146,9 @@ export default function TenantHome() {
           box-shadow: 0 6px 18px rgba(234, 88, 12, 0.45);
         }
 
-        /* =====================================================================
-         * MOBILE PILLAR SWITCHER BAR (<860px)
-         * মোবাইলে হেডারের সেন্টার বারটি লুকিয়ে যায়, তাই মোবাইলের জন্য হিরো সেকশনের নিচে
-         * এই স্টিকি পিলার বারটি (SearchKart | FacilityKart | BudgetKart) দেওয়া হয়েছে
-         * যাতে ব্যবহারকারী মোবাইল থেকে এক ক্লিকেই তিন স্তম্ভে যেতে পারেন।
-         * ===================================================================== */
-        .pk-mobile-pillar-bar {
-          display: none;
-        }
-
         @media (max-width: 860px) {
-          .pk-sticky-cat-pills {
-            display: none;
-          }
           .pk-mobile-pillar-bar {
-            display: flex;
-            align-items: center;
-            justify-content: space-around;
-            background: #ffffff;
-            border-bottom: 1px solid #ebe1c9;
-            padding: 8px 10px;
-            gap: 6px;
-            position: sticky;
-            top: 60px;
-            z-index: 90;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
-          }
-          .pk-mob-tab {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            padding: 8px 10px;
-            border-radius: 12px;
-            border: 1px solid #ebe1c9;
-            background: #faf7f0;
-            color: #4b5563;
-            font-size: 12px;
-            font-weight: 800;
-            cursor: pointer;
-            transition: all 0.15s ease;
-          }
-          .pk-mob-tab.active {
-            background: #1E3A8A;
-            color: #ffffff;
-            border-color: #1E3A8A;
-            box-shadow: 0 3px 10px rgba(30, 58, 138, 0.25);
+            display: none !important;
           }
         }
 
@@ -2300,11 +2278,10 @@ export default function TenantHome() {
                 setSearchQuery('');
                 scrollToListings();
               }}
-              className={`min-w-[96px] px-5 py-2.5 rounded-full font-extrabold text-sm border shadow-lg transition hover:-translate-y-0.5 cursor-pointer flex items-center justify-center gap-1.5 ${
-                selectedCategory === 'All'
+              className={`min-w-[96px] px-5 py-2.5 rounded-full font-extrabold text-sm border shadow-lg transition hover:-translate-y-0.5 cursor-pointer flex items-center justify-center gap-1.5 ${selectedCategory === 'All'
                   ? 'bg-[#FF9A1F] text-white border-[#FF9A1F]'
                   : 'bg-white/95 hover:bg-white text-[#0b2545] border-white'
-              }`}
+                }`}
             >
               <span>✨ All</span>
             </button>
@@ -2314,11 +2291,10 @@ export default function TenantHome() {
                 setSelectedCategory('Flats');
                 scrollToListings();
               }}
-              className={`min-w-[96px] px-5 py-2.5 rounded-full font-extrabold text-sm border shadow-lg transition hover:-translate-y-0.5 cursor-pointer flex items-center justify-center gap-1.5 ${
-                selectedCategory === 'Flats'
+              className={`min-w-[96px] px-5 py-2.5 rounded-full font-extrabold text-sm border shadow-lg transition hover:-translate-y-0.5 cursor-pointer flex items-center justify-center gap-1.5 ${selectedCategory === 'Flats'
                   ? 'bg-[#FF9A1F] text-white border-[#FF9A1F]'
                   : 'bg-white/95 hover:bg-white text-[#0b2545] border-white'
-              }`}
+                }`}
             >
               <span className="text-[#ea580c]">🏢</span>
               <span>Flats</span>
@@ -2329,11 +2305,10 @@ export default function TenantHome() {
                 setSelectedCategory('PG');
                 scrollToListings();
               }}
-              className={`min-w-[96px] px-5 py-2.5 rounded-full font-extrabold text-sm border shadow-lg transition hover:-translate-y-0.5 cursor-pointer flex items-center justify-center gap-1.5 ${
-                selectedCategory === 'PG'
+              className={`min-w-[96px] px-5 py-2.5 rounded-full font-extrabold text-sm border shadow-lg transition hover:-translate-y-0.5 cursor-pointer flex items-center justify-center gap-1.5 ${selectedCategory === 'PG'
                   ? 'bg-[#FF9A1F] text-white border-[#FF9A1F]'
                   : 'bg-white/95 hover:bg-white text-[#0b2545] border-white'
-              }`}
+                }`}
             >
               <span className="text-[#ea580c]">🛏️</span>
               <span>PGs</span>
@@ -2344,11 +2319,10 @@ export default function TenantHome() {
                 setSelectedCategory('Rooms');
                 scrollToListings();
               }}
-              className={`min-w-[96px] px-5 py-2.5 rounded-full font-extrabold text-sm border shadow-lg transition hover:-translate-y-0.5 cursor-pointer flex items-center justify-center gap-1.5 ${
-                selectedCategory === 'Rooms'
+              className={`min-w-[96px] px-5 py-2.5 rounded-full font-extrabold text-sm border shadow-lg transition hover:-translate-y-0.5 cursor-pointer flex items-center justify-center gap-1.5 ${selectedCategory === 'Rooms'
                   ? 'bg-[#FF9A1F] text-white border-[#FF9A1F]'
                   : 'bg-white/95 hover:bg-white text-[#0b2545] border-white'
-              }`}
+                }`}
             >
               <span className="text-[#ea580c]">🚪</span>
               <span>Rooms</span>
@@ -2356,34 +2330,6 @@ export default function TenantHome() {
           </div>
         </div>
       </section>
-
-      {/* MOBILE PILLAR SWITCHER BAR (<860px) */}
-      <div className="pk-mobile-pillar-bar">
-        <button
-          type="button"
-          className={`pk-mob-tab ${activePillar === 'SearchKart' ? 'active' : ''}`}
-          onClick={() => setActivePillar('SearchKart')}
-        >
-          <span style={{ fontSize: '13px' }}>🔍</span>
-          <span>SearchKart</span>
-        </button>
-        <button
-          type="button"
-          className={`pk-mob-tab ${activePillar === 'FacilityKart' ? 'active' : ''}`}
-          onClick={() => setActivePillar('FacilityKart')}
-        >
-          <span style={{ fontSize: '13px' }}>🛠️</span>
-          <span>FacilityKart</span>
-        </button>
-        <button
-          type="button"
-          className={`pk-mob-tab ${activePillar === 'BudgetKart' ? 'active' : ''}`}
-          onClick={() => setActivePillar('BudgetKart')}
-        >
-          <span style={{ fontSize: '13px' }}>💰</span>
-          <span>BudgetKart</span>
-        </button>
-      </div>
 
       {/* MAIN CONTENT AREA */}
       <main className="pk-main-content">
@@ -2542,8 +2488,8 @@ export default function TenantHome() {
                   prop.type === 'PG' || prop.type === 'pg'
                     ? 'PG / Hostel'
                     : prop.type === 'Room' || prop.type === 'room'
-                    ? 'Room'
-                    : 'Flat';
+                      ? 'Room'
+                      : 'Flat';
 
                 const depositText = prop.deposit
                   ? typeof prop.deposit === 'number'
@@ -2555,17 +2501,17 @@ export default function TenantHome() {
                   typeof prop.nearby === 'string'
                     ? prop.nearby
                     : Array.isArray(prop.nearby) && prop.nearby.length > 0
-                    ? `${prop.nearby[0][1]} (${prop.nearby[0][2]})`
-                    : 'Near Salt Lake Sector V Metro Station';
+                      ? `${prop.nearby[0][1]} (${prop.nearby[0][2]})`
+                      : 'Near Salt Lake Sector V Metro Station';
 
                 const rulePills =
                   Array.isArray(prop.rules) && prop.rules.length > 0
                     ? prop.rules
                     : [
-                        prop.furnishing || 'Semi-furnished',
-                        prop.bathroom ? `${prop.bathroom} bathroom` : '1 bathroom',
-                        prop.availability || 'Available now',
-                      ];
+                      prop.furnishing || 'Semi-furnished',
+                      prop.bathroom ? `${prop.bathroom} bathroom` : '1 bathroom',
+                      prop.availability || 'Available now',
+                    ];
 
                 return (
                   <article
@@ -2617,11 +2563,10 @@ export default function TenantHome() {
                         <button
                           type="button"
                           onClick={(e) => toggleFavorite(e, prop)}
-                          className={`absolute top-3 right-3 w-8 h-8 rounded-full ${
-                            isFav
+                          className={`absolute top-3 right-3 w-8 h-8 rounded-full ${isFav
                               ? 'bg-[#E85D04] text-white'
                               : 'bg-white/90 text-[#0B2545] hover:bg-white'
-                          } flex items-center justify-center shadow-xs transition cursor-pointer z-10`}
+                            } flex items-center justify-center shadow-xs transition cursor-pointer z-10`}
                           title={isFav ? 'Saved' : 'Save Property'}
                         >
                           <i className={`${isFav ? 'fa-solid' : 'fa-regular'} fa-heart text-xs`}></i>
@@ -2676,11 +2621,10 @@ export default function TenantHome() {
                             return (
                               <span
                                 key={rIdx}
-                                className={`px-2.5 py-1 rounded-md text-[11px] font-bold ${
-                                  isBachelor
+                                className={`px-2.5 py-1 rounded-md text-[11px] font-bold ${isBachelor
                                     ? 'bg-emerald-50 text-emerald-800 border border-emerald-600/25'
                                     : 'bg-[#E6DEC9] text-[#0B2545]'
-                                }`}
+                                  }`}
                               >
                                 {rule}
                               </span>

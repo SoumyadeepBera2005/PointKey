@@ -312,6 +312,14 @@ async function login(req, res, next) {
       if (existingUser.account_status === 'BLOCKED') return res.status(403).json({ message: 'Account blocked. Contact support.' });
       if (existingUser.account_status === 'DELETED') return res.status(403).json({ message: 'Account deleted.' });
 
+      // পূর্বে রেজিস্টার্ড ইউজার হলে: ইমেইলের সাথে তার রেজিস্টার্ড মোবাইল নম্বর মিলছে কিনা ওটিপি পাঠানোর আগেই যাচাই করা
+      const registeredPhone = normalizePhone(existingUser.phone);
+      if (registeredPhone && registeredPhone.length === 10 && registeredPhone !== normalizedPhone) {
+        return res.status(400).json({
+          message: 'The mobile number entered does not match our records for this email address. Please enter the correct registered mobile number.',
+        });
+      }
+
       // If password was explicitly provided, verify it (for backward compatibility)
       if (password) {
         const ok = await bcrypt.compare(String(password), existingUser.password_hash);
@@ -385,7 +393,17 @@ async function verifyLoginOtp(req, res, next) {
     } else {
       if (user.account_status === 'BLOCKED') return res.status(403).json({ message: 'Account blocked. Contact support.' });
       if (user.account_status === 'DELETED') return res.status(403).json({ message: 'Account deleted.' });
-      if (normalizedPhone && normalizedPhone.length === 10 && normalizePhone(user.phone) !== normalizedPhone) {
+
+      // পূর্বে রেজিস্টার্ড অ্যাকাউন্টের সাথে মোবাইল নম্বর হুবহু মিলতে হবে
+      const registeredPhone = normalizePhone(user.phone);
+      if (registeredPhone && registeredPhone.length === 10 && normalizedPhone && normalizedPhone.length === 10 && registeredPhone !== normalizedPhone) {
+        return res.status(400).json({
+          message: 'The mobile number entered does not match the registered mobile number for this email.',
+        });
+      }
+
+      // পূর্বে কোনো ফোন নম্বর সেট না থাকলে নতুন নম্বরটি সেট হবে
+      if ((!user.phone || normalizePhone(user.phone).length !== 10) && normalizedPhone && normalizedPhone.length === 10) {
         await db.query('UPDATE users SET phone = ? WHERE id = ?', [normalizedPhone, user.id]);
         user.phone = normalizedPhone;
       }

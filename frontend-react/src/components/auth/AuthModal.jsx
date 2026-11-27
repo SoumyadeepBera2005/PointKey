@@ -11,16 +11,23 @@ import {
   CheckCircle2, 
   AlertCircle,
   ArrowRight,
-  ShieldCheck,
-  Sparkles
+  ShieldCheck
 } from 'lucide-react';
+
+// Normalize any incoming mode to ensure the login form always renders
+const resolveMode = (m) => {
+  if (m === 'admin') return 'admin';
+  if (m === 'otp') return 'otp';
+  if (m === 'done') return 'done';
+  return 'input'; // handles 'login', 'signup', 'input', undefined, null
+};
 
 export default function AuthModal({ isOpen, onClose, initialMode = 'input', promptMessage = '' }) {
   const navigate = useNavigate();
   const { login, verifyLoginOtp, adminLogin, refreshUser } = useAuth();
 
   // Mode: 'input' | 'otp' | 'admin' | 'done'
-  const [mode, setMode] = useState(initialMode || 'input');
+  const [mode, setMode] = useState(() => resolveMode(initialMode));
 
   const [formData, setFormData] = useState({
     email: '',
@@ -47,7 +54,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'input', prom
   // Reset states when opening modal or changing initialMode
   useEffect(() => {
     if (isOpen) {
-      setMode(initialMode || 'input');
+      setMode(resolveMode(initialMode));
       setFieldErrors({});
       setFormError('');
       setDevOtp('');
@@ -119,7 +126,11 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'input', prom
       setOtpSuccessMsg(data.message || 'Verification code sent to your email.');
       setMode('otp');
     } catch (err) {
-      setFormError(err.response?.data?.message || 'Could not send verification code. Please check your details.');
+      const msg = err.response?.data?.message || 'Could not send verification code. Please check your details.';
+      setFormError(msg);
+      if (msg.toLowerCase().includes('mobile number')) {
+        setFieldErrors((prev) => ({ ...prev, phone: msg }));
+      }
     } finally {
       setBusy(false);
     }
@@ -259,7 +270,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'input', prom
         {/* ==============================================================
             MODE: STEP 1 - USER LOGIN OR SIGNUP (EMAIL & PHONE OTP)
             ============================================================== */}
-        {mode === 'input' && (
+        {(mode === 'input' || mode === 'login' || mode === 'signup') && (
           <div>
             <h3 className="text-xl font-black text-[#17324D] mt-2">
               Login or Sign Up
@@ -348,14 +359,6 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'input', prom
                 )}
               </button>
             </form>
-
-            {/* Quick Informational Pill (OYO / Blinkit style) */}
-            <div className="mt-4 p-3 rounded-2xl bg-white/70 border border-[#E7DDC8] flex items-center gap-2.5 text-[11px] text-slate-600 font-medium">
-              <Sparkles size={16} className="text-[#FF9A1F] shrink-0" />
-              <span>
-                <strong>Passwordless Login:</strong> No passwords or role selection needed. Instant access via Email OTP.
-              </span>
-            </div>
 
             <p className="text-[11px] text-center text-slate-500 mt-3 leading-relaxed">
               By continuing, you agree to PointKey&apos;s Zero Brokerage Terms &amp; Community Privacy.
@@ -536,7 +539,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'input', prom
                   <input
                     type="text"
                     maxLength={6}
-                    placeholder="123456 (dev default)"
+                    placeholder="Enter 6-digit MFA code"
                     value={adminMfa}
                     onChange={(e) => {
                       setAdminMfa(e.target.value.replace(/\D/g, '').slice(0, 6));
@@ -546,14 +549,6 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'input', prom
                     className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-white border border-[#d8cba9] text-xs font-mono font-bold text-[#0B2545] tracking-widest focus:outline-none focus:border-[#1f4d3f] focus:ring-2 focus:ring-[#1f4d3f]/15"
                   />
                 </div>
-              </div>
-
-              {/* Quick Dev Info Box */}
-              <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 font-semibold flex items-center gap-2">
-                <span className="text-sm">🔑</span>
-                <span>
-                  Seed Admin: <strong>admin@prent.in</strong> · Pass: <strong>Admin@123</strong> · MFA: <strong>123456</strong>
-                </span>
               </div>
 
               {/* General Form Error */}

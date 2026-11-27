@@ -70,13 +70,15 @@ async function reviewOwnerVerification(req, res, next) {
   } catch (e) { next(e); }
 }
 
-// POST /api/v1/admin/properties/:id/verify  { decision: VERIFIED|REJECTED }
+// POST /api/v1/admin/properties/:id/verify  { decision: VERIFIED|REJECTED|UNDER_REVIEW }
 async function verifyProperty(req, res, next) {
   try {
     const { decision } = req.body;
-    if (!['VERIFIED', 'REJECTED'].includes(decision)) return res.status(400).json({ message: 'decision must be VERIFIED or REJECTED' });
+    if (!['VERIFIED', 'REJECTED', 'UNDER_REVIEW'].includes(decision)) {
+      return res.status(400).json({ message: 'decision must be VERIFIED, REJECTED, or UNDER_REVIEW' });
+    }
     await db.query('UPDATE properties SET verification_status = ? WHERE id = ?', [decision, req.params.id]);
-    res.json({ message: `Property ${decision.toLowerCase()}` });
+    res.json({ message: `Property status updated to ${decision.toLowerCase()}` });
   } catch (e) { next(e); }
 }
 
@@ -84,9 +86,9 @@ async function verifyProperty(req, res, next) {
 async function pendingProperties(req, res, next) {
   try {
     const [rows] = await db.query(
-      `SELECT p.id, p.property_code, p.title, p.category, p.rent_amount, p.created_at, u.full_name AS owner_name
+      `SELECT p.id, p.property_code, p.title, p.category, p.rent_amount, p.created_at, p.verification_status, u.full_name AS owner_name
        FROM properties p JOIN users u ON u.id = p.owner_id
-       WHERE p.verification_status = 'PENDING' ORDER BY p.created_at ASC`
+       WHERE p.verification_status IN ('PENDING', 'UNDER_REVIEW') ORDER BY p.created_at ASC`
     );
     res.json({ properties: rows });
   } catch (e) { next(e); }

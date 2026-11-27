@@ -506,6 +506,17 @@ export default function Navbar({
           gap: 8px;
         }
 
+        .pk-hamburger-btn {
+          display: inline-flex;
+        }
+
+        @media (min-width: 1024px) {
+          .pk-hamburger-btn,
+          .pk-mobile-drawer {
+            display: none !important;
+          }
+        }
+
         .pk-mobile-nav-link {
           padding: 10px 14px;
           border-radius: 10px;
@@ -1401,12 +1412,11 @@ export default function Navbar({
               </button>
             )}
 
-            {/* Mobile Menu Hamburger */}
+            {/* Mobile Menu Hamburger (Hidden on Desktop) */}
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="pk-nav-icon-btn"
-              style={{ display: 'flex' }}
+              className="pk-nav-icon-btn pk-hamburger-btn lg:hidden"
               aria-label="Toggle menu"
             >
               <span>{mobileMenuOpen ? '✕' : '☰'}</span>

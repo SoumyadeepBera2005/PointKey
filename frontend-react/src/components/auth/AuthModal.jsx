@@ -5,6 +5,9 @@ import {
   X, 
   Mail, 
   Phone, 
+  Lock,
+  Eye,
+  EyeOff,
   CheckCircle2, 
   AlertCircle,
   ArrowRight,
@@ -12,17 +15,23 @@ import {
   Sparkles
 } from 'lucide-react';
 
-export default function AuthModal({ isOpen, onClose, promptMessage = '' }) {
+export default function AuthModal({ isOpen, onClose, initialMode = 'input', promptMessage = '' }) {
   const navigate = useNavigate();
-  const { login, verifyLoginOtp, refreshUser } = useAuth();
+  const { login, verifyLoginOtp, adminLogin, refreshUser } = useAuth();
 
-  // Mode: 'input' | 'otp' | 'done'
-  const [mode, setMode] = useState('input');
+  // Mode: 'input' | 'otp' | 'admin' | 'done'
+  const [mode, setMode] = useState(initialMode || 'input');
 
   const [formData, setFormData] = useState({
     email: '',
     phone: '',
   });
+
+  // Admin credentials state
+  const [adminEmail, setAdminEmail] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [adminMfa, setAdminMfa] = useState('');
+  const [showAdminPass, setShowAdminPass] = useState(false);
 
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState('');
@@ -35,17 +44,21 @@ export default function AuthModal({ isOpen, onClose, promptMessage = '' }) {
   const [otpSecondsLeft, setOtpSecondsLeft] = useState(60);
   const [otpSuccessMsg, setOtpSuccessMsg] = useState('');
 
-  // Reset states when opening modal
+  // Reset states when opening modal or changing initialMode
   useEffect(() => {
     if (isOpen) {
-      setMode('input');
+      setMode(initialMode || 'input');
       setFieldErrors({});
       setFormError('');
       setDevOtp('');
       setOtpCode('');
       setOtpSuccessMsg('');
+      setAdminEmail('');
+      setAdminPassword('');
+      setAdminMfa('');
+      setShowAdminPass(false);
     }
-  }, [isOpen]);
+  }, [isOpen, initialMode]);
 
   // Format countdown seconds MM:SS
   const formatTime = (secs) => {
@@ -161,12 +174,37 @@ export default function AuthModal({ isOpen, onClose, promptMessage = '' }) {
     }
   };
 
+  // Admin login handler
+  const handleAdminSubmit = async (e) => {
+    e.preventDefault();
+    if (!adminEmail.trim() || !adminPassword || !adminMfa.trim()) {
+      setFormError('Please enter admin email, password and 6-digit MFA code.');
+      return;
+    }
+    setBusy(true);
+    setFormError('');
+
+    try {
+      await adminLogin(adminEmail.trim(), adminPassword, adminMfa.trim());
+      await refreshUser();
+      setMode('done');
+      setTimeout(() => {
+        onClose();
+        navigate('/admin', { replace: true });
+      }, 900);
+    } catch (err) {
+      setFormError(err.response?.data?.message || 'Admin authentication failed. Please check credentials & MFA code.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div 
       className="fixed inset-0 z-[10000] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto font-sans animate-in fade-in duration-200"
       onClick={onClose}
     >
-      {/* Modal Card */}
+      {/* Modal Card - Matching EXACT styling and color from screenshot */}
       <div 
         className="bg-[#FBF8F2] border border-[#E8DCB9] rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl relative my-auto animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
@@ -187,8 +225,12 @@ export default function AuthModal({ isOpen, onClose, promptMessage = '' }) {
             pK
           </div>
           <span className="text-lg font-black text-[#17324D] tracking-tight">PointKey</span>
-          <span className="ml-auto mr-7 inline-block px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold">
-            ZERO BROKERAGE
+          <span className={`ml-auto mr-7 inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+            mode === 'admin'
+              ? 'bg-slate-900 text-white'
+              : 'bg-emerald-100 text-emerald-800'
+          }`}>
+            {mode === 'admin' ? 'ADMIN ACCESS' : 'ZERO BROKERAGE'}
           </span>
         </div>
 
@@ -207,13 +249,15 @@ export default function AuthModal({ isOpen, onClose, promptMessage = '' }) {
             <div className="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto mb-4">
               <CheckCircle2 size={36} />
             </div>
-            <h3 className="text-xl font-black text-[#17324D]">Welcome to PointKey!</h3>
-            <p className="text-xs text-slate-600 mt-1">Logged in successfully. Zero brokerage unlocked.</p>
+            <h3 className="text-xl font-black text-[#17324D]">
+              {mode === 'admin' ? 'Welcome Admin!' : 'Welcome to PointKey!'}
+            </h3>
+            <p className="text-xs text-slate-600 mt-1">Authenticated successfully. Opening dashboard...</p>
           </div>
         )}
 
         {/* ==============================================================
-            MODE: STEP 1 - EMAIL & PHONE (OYO / BLINKIT STYLE)
+            MODE: STEP 1 - USER LOGIN OR SIGNUP (EMAIL & PHONE OTP)
             ============================================================== */}
         {mode === 'input' && (
           <div>
@@ -317,13 +361,19 @@ export default function AuthModal({ isOpen, onClose, promptMessage = '' }) {
               By continuing, you agree to PointKey&apos;s Zero Brokerage Terms &amp; Community Privacy.
             </p>
 
+            {/* Switch to Admin Mode directly inside this same popup! */}
             <div className="text-center pt-2.5 border-t border-[#E7DDC8]/60 mt-3">
-              <a
-                href="/admin/login"
-                className="text-[11px] font-bold text-slate-400 hover:text-[#17324D] transition"
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('admin');
+                  setFormError('');
+                  setFieldErrors({});
+                }}
+                className="text-[11px] font-bold text-slate-400 hover:text-[#17324D] transition cursor-pointer"
               >
                 🔐 Admin Portal Login →
-              </a>
+              </button>
             </div>
           </div>
         )}
@@ -408,6 +458,137 @@ export default function AuthModal({ isOpen, onClose, promptMessage = '' }) {
                 className="w-full text-center text-xs font-bold text-slate-600 hover:text-slate-900 mt-2 cursor-pointer"
               >
                 ← Edit Email or Mobile Number
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* ==============================================================
+            MODE: ADMIN PORTAL LOGIN (SAME POPUP MODAL & COLORS)
+            ============================================================== */}
+        {mode === 'admin' && (
+          <div>
+            <h3 className="text-xl font-black text-[#17324D] mt-2">
+              Admin Portal Login
+            </h3>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Restricted to PointKey platform administrators. MFA code required.
+            </p>
+
+            <form onSubmit={handleAdminSubmit} className="mt-4 space-y-3">
+              {/* Admin Email */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Admin Email
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-3 text-slate-400" size={16} />
+                  <input
+                    type="email"
+                    placeholder="admin@prent.in"
+                    value={adminEmail}
+                    onChange={(e) => {
+                      setAdminEmail(e.target.value);
+                      setFormError('');
+                    }}
+                    required
+                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-white border border-[#d8cba9] text-xs font-bold text-[#0B2545] focus:outline-none focus:border-[#1f4d3f] focus:ring-2 focus:ring-[#1f4d3f]/15"
+                    autoFocus
+                  />
+                </div>
+              </div>
+
+              {/* Password */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Password
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-3 text-slate-400" size={16} />
+                  <input
+                    type={showAdminPass ? 'text' : 'password'}
+                    placeholder="••••••••"
+                    value={adminPassword}
+                    onChange={(e) => {
+                      setAdminPassword(e.target.value);
+                      setFormError('');
+                    }}
+                    required
+                    className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-white border border-[#d8cba9] text-xs font-bold text-[#0B2545] focus:outline-none focus:border-[#1f4d3f] focus:ring-2 focus:ring-[#1f4d3f]/15"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminPass(!showAdminPass)}
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-700 cursor-pointer"
+                  >
+                    {showAdminPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* 6-Digit MFA Code */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  MFA Code (6 Digits)
+                </label>
+                <div className="relative">
+                  <ShieldCheck className="absolute left-3.5 top-3 text-slate-400" size={16} />
+                  <input
+                    type="text"
+                    maxLength={6}
+                    placeholder="123456 (dev default)"
+                    value={adminMfa}
+                    onChange={(e) => {
+                      setAdminMfa(e.target.value.replace(/\D/g, '').slice(0, 6));
+                      setFormError('');
+                    }}
+                    required
+                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-white border border-[#d8cba9] text-xs font-mono font-bold text-[#0B2545] tracking-widest focus:outline-none focus:border-[#1f4d3f] focus:ring-2 focus:ring-[#1f4d3f]/15"
+                  />
+                </div>
+              </div>
+
+              {/* Quick Dev Info Box */}
+              <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 font-semibold flex items-center gap-2">
+                <span className="text-sm">🔑</span>
+                <span>
+                  Seed Admin: <strong>admin@prent.in</strong> · Pass: <strong>Admin@123</strong> · MFA: <strong>123456</strong>
+                </span>
+              </div>
+
+              {/* General Form Error */}
+              {formError && (
+                <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold">
+                  {formError}
+                </div>
+              )}
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={busy}
+                className="w-full py-3 rounded-xl bg-[#1f4d3f] hover:bg-[#15382e] text-white font-black text-xs sm:text-sm shadow-md transition-all active:scale-95 disabled:opacity-60 flex items-center justify-center gap-2 cursor-pointer mt-2"
+              >
+                {busy ? (
+                  <span>Authenticating Admin...</span>
+                ) : (
+                  <>
+                    <span>Authenticate &amp; Enter Admin Panel</span>
+                    <ArrowRight size={16} />
+                  </>
+                )}
+              </button>
+
+              {/* Back to User Login Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('input');
+                  setFormError('');
+                }}
+                className="w-full text-center text-xs font-bold text-slate-600 hover:text-slate-900 mt-2 cursor-pointer"
+              >
+                ← Switch back to User Login
               </button>
             </form>
           </div>

@@ -16,7 +16,6 @@ import MyListings from './pages/owner/MyListings';
 import VisitRequests from './pages/owner/VisitRequests';
 import OwnerProfile from './pages/owner/OwnerProfile';
 
-import AdminLogin from './pages/admin/AdminLogin';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import ManageTenants from './pages/admin/ManageTenants';
 import ManageOwners from './pages/admin/ManageOwners';
@@ -28,7 +27,11 @@ function RequireRole({ roles }) {
 
   if (!user) {
     setTimeout(() => {
-      openAuthModal?.('login', 'tenant', 'Please log in to continue.');
+      if (roles.includes('ADMIN')) {
+        openAuthModal?.('admin', 'admin', 'Please log in as Admin to access this panel.');
+      } else {
+        openAuthModal?.('input', 'tenant', 'Please log in to continue.');
+      }
     }, 120);
     return <Navigate to="/" state={{ from: location }} replace />;
   }
@@ -46,7 +49,15 @@ function HomeRedirect() {
 function AuthRedirect() {
   const { openAuthModal } = useAuth();
   useEffect(() => {
-    openAuthModal?.('login', 'tenant');
+    openAuthModal?.('input', 'tenant');
+  }, [openAuthModal]);
+  return <Navigate to="/" replace />;
+}
+
+function AdminLoginRedirect() {
+  const { openAuthModal } = useAuth();
+  useEffect(() => {
+    openAuthModal?.('admin', 'admin', 'Admin authentication required.');
   }, [openAuthModal]);
   return <Navigate to="/" replace />;
 }
@@ -64,7 +75,7 @@ export default function App() {
       <Route path="/splash" element={<Navigate to="/" replace />} />
       <Route path="/onboarding" element={<Navigate to="/" replace />} />
       <Route path="/role-selection" element={<Navigate to="/" replace />} />
-      <Route path="/admin/login" element={<AdminLogin />} />
+      <Route path="/admin/login" element={<AdminLoginRedirect />} />
 
       {/* Protected Tenant Routes */}
       <Route element={<RequireRole roles={['TENANT']} />}>

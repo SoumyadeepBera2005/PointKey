@@ -3628,6 +3628,9 @@ export default function TenantHome() {
             <span style={{ cursor: 'pointer' }} onClick={() => showToast('Support desk online')}>
               Support
             </span>
+            <a href="/admin/login" style={{ color: '#94a3b8', textDecoration: 'none', cursor: 'pointer', transition: 'color 0.15s' }}>
+              Admin Portal
+            </a>
           </div>
         </div>
       </footer>

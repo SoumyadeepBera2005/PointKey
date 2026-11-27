@@ -316,6 +316,15 @@ export default function AuthModal({ isOpen, onClose, promptMessage = '' }) {
             <p className="text-[11px] text-center text-slate-500 mt-3 leading-relaxed">
               By continuing, you agree to PointKey&apos;s Zero Brokerage Terms &amp; Community Privacy.
             </p>
+
+            <div className="text-center pt-2.5 border-t border-[#E7DDC8]/60 mt-3">
+              <a
+                href="/admin/login"
+                className="text-[11px] font-bold text-slate-400 hover:text-[#17324D] transition"
+              >
+                🔐 Admin Portal Login →
+              </a>
+            </div>
           </div>
         )}
 

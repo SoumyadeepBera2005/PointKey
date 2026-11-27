@@ -6,6 +6,14 @@ import HomeMateChatbot from '../../components/ai/HomeMateChatbot';
 import { SAMPLE_PROPERTIES } from '../../data/sampleProperties';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
+import '../../styles/prototypeFeatures.css';
+import PersonaCards from '../../components/home/PersonaCards';
+import FacilitiesCarousel from '../../components/home/FacilitiesCarousel';
+import PointKeyLocker from '../../components/home/PointKeyLocker';
+import SmartPropertyMatching from '../../components/home/SmartPropertyMatching';
+import ContactOwnerModal from '../../components/modals/ContactOwnerModal';
+import VerificationModal from '../../components/modals/VerificationModal';
+import ServiceDrawer from '../../components/modals/ServiceDrawer';
 
 function generateDynamicCityProperties(city) {
   if (!city || city === 'All Cities' || city === 'All') return [];
@@ -259,7 +267,37 @@ const FAQS = [
 
 export default function TenantHome() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, openAuthModal } = useAuth();
+  const [isServiceDrawerOpen, setIsServiceDrawerOpen] = useState(false);
+  const [isContactModalOpen, setIsContactModalOpen] = useState(false);
+  const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
+  const [selectedContactProp, setSelectedContactProp] = useState(null);
+
+  const handleAddToCart = (srv) => {
+    try {
+      const currentCart = JSON.parse(localStorage.getItem('prent_service_cart') || '{}');
+      currentCart[srv.id] = (currentCart[srv.id] || 0) + 1;
+      localStorage.setItem('prent_service_cart', JSON.stringify(currentCart));
+      window.dispatchEvent(new Event('prent_cart_updated'));
+      showToast(`🛒 Added ${srv.title} to FacilityKart bag!`);
+    } catch {}
+  };
+
+  const handlePersonaSelect = (persona) => {
+    if (persona === 'student') {
+      setSelectedCategory('PG');
+      showToast('🎓 Showing budget PGs, student-friendly rooms & meal stays.');
+    } else if (persona === 'bachelor') {
+      setSelectedCategory('Rooms');
+      showToast('💼 Showing 100% bachelor-friendly flats & rooms with zero restrictions.');
+    } else if (persona === 'family') {
+      setSelectedCategory('Flats');
+      showToast('👨‍👩‍👧‍👦 Showing verified 2 & 3 BHK family apartments near top amenities.');
+    }
+    setTimeout(() => {
+      document.getElementById('searchkart-listings-section')?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  };
   const isSuspended = user?.account_status === 'SUSPENDED';
   const isBlocked = user?.account_status === 'BLOCKED';
   const isRestricted = isSuspended || isBlocked;
@@ -918,7 +956,7 @@ export default function TenantHome() {
           transform: translateY(-1px);
         }
 
-        /* STICKY SEARCH BAR ON SCROLL (OYO STYLE - FLOATING CENTERED PILL) */
+        /* STICKY SEARCH BAR ON SCROLL (MATCHING IMAGE 1 DESIGN) */
         .pk-sticky-search-bar {
           position: fixed;
           top: 14px;
@@ -932,6 +970,7 @@ export default function TenantHome() {
           transform: translateY(-90px);
           opacity: 0;
           transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease;
+          padding: 0 16px;
         }
 
         .pk-sticky-search-bar.is-sticky {
@@ -939,116 +978,108 @@ export default function TenantHome() {
           opacity: 1;
         }
 
-        .pk-sticky-inner {
+        .pk-sticky-card {
           pointer-events: auto;
-          width: min(840px, calc(100vw - 48px));
+          width: min(840px, calc(100vw - 32px));
           margin: 0 auto;
           background: #ffffff;
-          border-radius: 9999px;
-          padding: 6px 8px 6px 20px;
+          border-radius: 20px;
+          padding: 8px 10px;
           display: flex;
           align-items: center;
-          gap: 12px;
-          box-shadow: 0 14px 40px rgba(15, 23, 42, 0.22), 0 2px 8px rgba(0, 0, 0, 0.08);
-          border: 1.5px solid #d8cba9;
+          gap: 10px;
+          box-shadow: 0 14px 40px rgba(15, 23, 42, 0.18), 0 2px 10px rgba(0, 0, 0, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.9);
         }
 
-        .pk-sticky-icon {
-          color: #1E3A8A;
-          display: flex;
-          align-items: center;
-          flex-shrink: 0;
-        }
-
-        .pk-sticky-input {
+        .pk-search-input-wrap {
           flex: 1;
-          border: 0;
-          outline: 0;
+          display: flex;
+          align-items: center;
+          background: #f6efdf;
+          border: 2px solid #FF9A1F;
+          border-radius: 14px;
+          padding: 0 12px 0 16px;
+          height: 48px;
+          min-width: 0;
+          transition: all 0.15s ease;
+        }
+
+        .pk-search-input-wrap:focus-within {
+          border-color: #ea580c;
+          box-shadow: 0 0 0 3px rgba(255, 154, 31, 0.2);
+        }
+
+        .pk-search-icon {
+          color: #64748b;
+          font-size: 16px;
+          margin-right: 10px;
+          flex-shrink: 0;
+          display: flex;
+          align-items: center;
+        }
+
+        .pk-search-input {
+          flex: 1;
           background: transparent;
+          border: none;
+          outline: none;
           font-size: 14.5px;
           font-weight: 500;
-          color: #111827;
-          font-family: inherit;
+          color: #0b2545;
           min-width: 0;
+          font-family: inherit;
         }
 
-        .pk-sticky-input::placeholder {
-          color: #6b7280;
+        .pk-search-input::placeholder {
+          color: #64748b;
           font-weight: 400;
         }
 
-        .pk-sticky-clear-btn {
-          background: #f6efdf;
-          border: 0;
-          color: #5b5547;
+        .pk-clear-btn {
+          background: #ebdcc0;
+          border: none;
+          color: #17324D;
           width: 22px;
           height: 22px;
           border-radius: 50%;
           font-size: 11px;
-          display: grid;
-          place-items: center;
+          display: flex;
+          align-items: center;
+          justify-content: center;
           cursor: pointer;
+          margin-left: 8px;
           flex-shrink: 0;
-          transition: background 0.15s, color 0.15s;
+          transition: background 0.15s;
         }
 
-        .pk-sticky-clear-btn:hover {
-          background: #eedfc7;
-          color: #141414;
+        .pk-clear-btn:hover {
+          background: #d8cba9;
         }
 
-        .pk-sticky-cat-pills {
+        .pk-search-btn {
+          height: 48px;
+          padding: 0 26px;
+          background: #FF9A1F;
+          color: #ffffff;
+          border: none;
+          border-radius: 14px;
+          font-size: 15px;
+          font-weight: 800;
           display: flex;
           align-items: center;
           gap: 6px;
-          flex-shrink: 0;
-        }
-
-        .pk-sticky-pill {
-          padding: 7px 13px;
-          border-radius: 9999px;
-          font-size: 12.5px;
-          font-weight: 700;
-          border: 1px solid #d8cba9;
-          background: #faf7f0;
-          color: #374151;
           cursor: pointer;
-          transition: all 0.15s ease;
+          flex-shrink: 0;
+          transition: all 0.18s ease;
+          box-shadow: 0 4px 14px rgba(255, 154, 31, 0.35);
           white-space: nowrap;
         }
 
-        .pk-sticky-pill:hover {
-          background: #f6efdf;
-          color: #141414;
-        }
-
-        .pk-sticky-pill.active {
-          background: #1E3A8A;
-          color: #ffffff;
-          border-color: #1E3A8A;
-          box-shadow: 0 2px 8px rgba(30, 58, 138, 0.25);
-        }
-
-        .pk-sticky-submit-btn {
-          background: #14532D;
-          color: #ffffff;
-          border: 0;
-          border-radius: 9999px;
-          padding: 10px 22px;
-          font-size: 13.5px;
-          font-weight: 800;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          transition: background 0.15s, transform 0.15s;
-          flex-shrink: 0;
-          box-shadow: 0 4px 14px rgba(20, 83, 45, 0.35);
-        }
-
-        .pk-sticky-submit-btn:hover {
-          background: #166534;
+        .pk-search-btn:hover {
+          background: #ea580c;
           transform: translateY(-1px);
+          box-shadow: 0 6px 18px rgba(234, 88, 12, 0.45);
         }
 
         /* =====================================================================
@@ -2121,55 +2152,41 @@ export default function TenantHome() {
         </div>
       </div>
 
-      {/* STICKY SEARCH BAR ON SCROLL */}
+      {/* STICKY SEARCH BAR ON SCROLL (MATCHING IMAGE 1 DESIGN) */}
       <div
         className={`pk-sticky-search-bar ${isSearchSticky ? 'is-sticky' : ''}`}
         aria-hidden={!isSearchSticky}
       >
-        <div className="pk-sticky-inner">
-          <span className="pk-sticky-icon">🔍</span>
-          <input
-            type="text"
-            className="pk-sticky-input"
-            placeholder="Search area, locality, landmark or property type (Flats, Rooms, PG)..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && scrollToListings()}
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              className="pk-sticky-clear-btn"
-              onClick={() => setSearchQuery('')}
-              title="Clear Search"
-            >
-              ✕
-            </button>
-          )}
-
-          <div className="pk-sticky-cat-pills">
-            {['All', 'Flats', 'Rooms', 'PG'].map((cat) => (
+        <div className="pk-sticky-card">
+          <div className="pk-search-input-wrap">
+            <span className="pk-search-icon">🔍</span>
+            <input
+              type="text"
+              className="pk-search-input"
+              placeholder="Search area, locality, landmark or property (e.g. Salt Lake, Flats)..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && scrollToListings()}
+            />
+            {searchQuery && (
               <button
-                key={cat}
                 type="button"
-                className={`pk-sticky-pill ${selectedCategory === cat ? 'active' : ''}`}
-                onClick={() => {
-                  setSelectedCategory(cat);
-                  scrollToListings();
-                }}
+                className="pk-clear-btn"
+                onClick={() => setSearchQuery('')}
+                title="Clear Search"
               >
-                {cat === 'All' ? '✨ All' : cat === 'Flats' ? '🏢 Flats' : cat === 'Rooms' ? '🛋️ Rooms' : '🛏️ PG'}
+                ✕
               </button>
-            ))}
+            )}
           </div>
 
           <button
             type="button"
-            className="pk-sticky-submit-btn"
+            className="pk-search-btn"
             onClick={scrollToListings}
           >
-            <span>Search Homes</span>
-            <span style={{ color: '#fed7aa' }}>→</span>
+            <span>Search</span>
+            <span>→</span>
           </button>
         </div>
       </div>
@@ -2198,24 +2215,34 @@ export default function TenantHome() {
             </p>
           </div>
 
-          {/* Hero Search Box */}
-          <div className="max-w-3xl w-full mx-auto bg-white rounded-2xl shadow-2xl border border-white/80 p-2.5 sm:p-3">
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1 min-w-0">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">🔍</span>
+          {/* Hero Search Box (Matching Image 1 Design) */}
+          <div className="max-w-3xl w-full mx-auto bg-white rounded-2xl shadow-2xl border border-white/80 p-2 sm:p-2.5">
+            <div className="flex items-center gap-2.5">
+              <div className="pk-search-input-wrap">
+                <span className="pk-search-icon">🔍</span>
                 <input
                   type="text"
+                  className="pk-search-input"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && scrollToListings()}
                   placeholder="Search area, locality, landmark or property (e.g. Salt Lake, Flats)..."
-                  className="w-full bg-[#f6f1e7] border border-transparent rounded-xl pl-11 pr-3.5 py-3 sm:py-3.5 text-sm sm:text-base text-[#0b2545] placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#FF9A1F]"
                 />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    className="pk-clear-btn"
+                    onClick={() => setSearchQuery('')}
+                    title="Clear Search"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
               <button
                 type="button"
                 onClick={scrollToListings}
-                className="shrink-0 bg-[#FF9A1F] hover:bg-[#ea580c] text-white font-extrabold py-3 sm:py-3.5 px-6 sm:px-8 rounded-xl transition active:scale-95 shadow-md flex items-center gap-1.5 cursor-pointer text-sm sm:text-base"
+                className="pk-search-btn"
               >
                 <span>Search</span>
                 <span>→</span>
@@ -2386,6 +2413,11 @@ export default function TenantHome() {
         )}
 
         {/* ========================================================================= */}
+        {/* SECTION 2: PERSONA CARDS (FOR STUDENTS, BACHELORS, FAMILIES)             */}
+        {/* ========================================================================= */}
+        <PersonaCards onSelectPersona={handlePersonaSelect} />
+
+        {/* ========================================================================= */}
         {/* PILLAR 1: SEARCHKART VIEW                                                 */}
         {/* ========================================================================= */}
         {activePillar === 'SearchKart' && (
@@ -2461,110 +2493,186 @@ export default function TenantHome() {
               </div>
             )}
 
-            {/* Property Cards Grid */}
-            <div className="pk-cards-grid">
+            {/* Property Cards Grid (Styled exactly as Image 3) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {displayListings.map((prop, idx) => {
                 const isFav = favorites.some((f) => (typeof f === 'object' ? f.id : f) === prop.id);
-                const tagBadge =
-                  idx % 4 === 0
-                    ? 'Zero Brokerage'
-                    : idx % 4 === 1
-                      ? 'All-Inclusive'
-                      : idx % 4 === 2
-                        ? 'Student Special'
-                        : 'Instant Move-in';
+                const typeText =
+                  prop.type === 'PG' || prop.type === 'pg'
+                    ? 'PG / Hostel'
+                    : prop.type === 'Room' || prop.type === 'room'
+                    ? 'Room'
+                    : 'Flat';
+
+                const depositText = prop.deposit
+                  ? typeof prop.deposit === 'number'
+                    ? `₹${prop.deposit.toLocaleString('en-IN')} security deposit`
+                    : prop.deposit
+                  : '₹14,000 security deposit';
+
+                const nearbyText =
+                  typeof prop.nearby === 'string'
+                    ? prop.nearby
+                    : Array.isArray(prop.nearby) && prop.nearby.length > 0
+                    ? `${prop.nearby[0][1]} (${prop.nearby[0][2]})`
+                    : 'Near Salt Lake Sector V Metro Station';
+
+                const rulePills =
+                  Array.isArray(prop.rules) && prop.rules.length > 0
+                    ? prop.rules
+                    : [
+                        prop.furnishing || 'Semi-furnished',
+                        prop.bathroom ? `${prop.bathroom} bathroom` : '1 bathroom',
+                        prop.availability || 'Available now',
+                      ];
 
                 return (
                   <article
                     key={prop.id || idx}
-                    className="pk-listing-card"
+                    className="marketplace-card rounded-2xl overflow-hidden flex flex-col justify-between shadow-xs transition hover:shadow-lg cursor-pointer"
                     onClick={() => handleCardClick(prop)}
                   >
-                    <div className="pk-card-image-wrap">
-                      <img
-                        src={
-                          prop.image ||
-                          'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1200&q=90'
-                        }
-                        alt={prop.title}
-                        onError={(e) => {
-                          e.target.src =
-                            'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=90';
-                        }}
-                      />
+                    <div>
+                      {/* Image container */}
+                      <div className="relative h-48 bg-[#E6DEC9] overflow-hidden">
+                        <img
+                          src={
+                            prop.image ||
+                            'https://housing-images.n7net.in/01c16c28/eeed79bf947f40eba111e6b8b2f6fc78/v0/medium/1_rk_apartment-for-rent-mohishgot-Kolkata-bedroom.jpg'
+                          }
+                          alt={prop.title}
+                          className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+                          onError={(e) => {
+                            e.target.src =
+                              'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=90';
+                          }}
+                        />
 
-                      <div className="pk-card-badges">
-                        <span className="pk-badge-verified">✓ Verified</span>
-                        <span className="pk-badge-category">{prop.type || 'Flat'}</span>
-                      </div>
-
-                      <button
-                        type="button"
-                        className={`pk-card-heart-btn ${isFav ? 'is-fav' : ''}`}
-                        onClick={(e) => toggleFavorite(e, prop)}
-                        aria-label="Save favorite"
-                        title={isFav ? 'Saved' : 'Save'}
-                      >
-                        {isFav ? '♥' : '♡'}
-                      </button>
-
-                      <span className="pk-card-bottom-tag">{tagBadge}</span>
-                    </div>
-
-                    <div className="pk-card-details">
-                      <div className="pk-card-price-row">
-                        <div>
-                          <span className="pk-price-val">
-                            ₹{Number(prop.price || prop.monthly_rent || 0).toLocaleString('en-IN')}
+                        {/* Top-left Badges */}
+                        <div className="absolute top-3 left-3 flex flex-wrap gap-1.5 z-10">
+                          <span className="px-2.5 py-1 rounded-md bg-[#1B4332] text-white text-[11px] font-extrabold shadow-xs">
+                            100% Zero-Brokerage
                           </span>
-                          <span className="pk-price-unit">/mo</span>
+                          {prop.verifiedOwner !== false ? (
+                            <span
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#1B4332] text-white text-[11px] font-bold shadow-xs cursor-pointer hover:brightness-110"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setIsVerificationModalOpen(true);
+                              }}
+                              title="Verified Owner"
+                            >
+                              <i className="fa-solid fa-certificate text-emerald-300 text-[10px]"></i>
+                              <span>Verified Owner</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#0B2545]/90 text-white text-[11px] font-semibold shadow-xs">
+                              {prop.listerRole || 'PG / room listing'}
+                            </span>
+                          )}
                         </div>
-                        <span className="pk-location-tag">
-                          {prop.city || prop.location?.split(',')?.[0]?.trim() || 'Kolkata'}
+
+                        {/* Top-right Heart Button */}
+                        <button
+                          type="button"
+                          onClick={(e) => toggleFavorite(e, prop)}
+                          className={`absolute top-3 right-3 w-8 h-8 rounded-full ${
+                            isFav
+                              ? 'bg-[#E85D04] text-white'
+                              : 'bg-white/90 text-[#0B2545] hover:bg-white'
+                          } flex items-center justify-center shadow-xs transition cursor-pointer z-10`}
+                          title={isFav ? 'Saved' : 'Save Property'}
+                        >
+                          <i className={`${isFav ? 'fa-solid' : 'fa-regular'} fa-heart text-xs`}></i>
+                        </button>
+
+                        {/* Bottom-right Category Badge */}
+                        <span className="absolute bottom-3 right-3 px-2.5 py-1 rounded-md bg-[#0B2545]/90 text-white text-[11px] font-bold shadow-xs">
+                          {typeText}
                         </span>
                       </div>
 
-                      <h3 className="pk-card-prop-title" title={prop.title}>
-                        {prop.title}
-                      </h3>
+                      {/* Card Details */}
+                      <div className="p-5">
+                        {/* Price & Deposit Row */}
+                        <div className="flex items-baseline justify-between gap-2">
+                          <div>
+                            <span className="text-xl font-extrabold text-[#0B2545]">
+                              ₹{Number(prop.rent || prop.price || prop.monthly_rent || 0).toLocaleString('en-IN')}
+                            </span>
+                            <span className="text-xs font-medium text-slate-500 ml-1">/ month</span>
+                          </div>
+                          <span className="text-[11px] font-semibold text-slate-600 bg-[#E6DEC9] px-2.5 py-0.5 rounded-md">
+                            {depositText}
+                          </span>
+                        </div>
 
-                      <p className="pk-card-address">
-                        <span>📍</span>
-                        <span>{prop.location || 'Kolkata'}</span>
-                      </p>
+                        {/* Title */}
+                        <h3
+                          className="text-base font-extrabold text-[#0B2545] mt-2 line-clamp-1"
+                          title={prop.title}
+                        >
+                          {prop.title}
+                        </h3>
 
-                      <p className="pk-card-specs">
-                        {prop.subtype || prop.roomSize || 'Furnished'} •{' '}
-                        {prop.bathroom || 'Attached'} Bath • {prop.furnishing || 'Move-in ready'}
-                      </p>
+                        {/* Locality */}
+                        <p className="text-xs font-semibold text-slate-600 mt-1 flex items-center gap-1 truncate">
+                          <i className="fa-solid fa-location-dot text-[#E85D04] shrink-0 text-xs"></i>
+                          <span>{prop.locality || prop.location}</span>
+                        </p>
+
+                        {/* Nearby / Landmark */}
+                        <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+                          {nearbyText}
+                        </p>
+
+                        {/* Rule / Amenity Pills */}
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          {rulePills.map((rule, rIdx) => {
+                            const isBachelor =
+                              typeof rule === 'string' &&
+                              rule.toLowerCase().includes('bachelor');
+                            return (
+                              <span
+                                key={rIdx}
+                                className={`px-2.5 py-1 rounded-md text-[11px] font-bold ${
+                                  isBachelor
+                                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-600/25'
+                                    : 'bg-[#E6DEC9] text-[#0B2545]'
+                                }`}
+                              >
+                                {rule}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bottom Action Row (Orange Button + Report Flag) */}
+                    <div className="px-5 pb-5 pt-2 border-t border-[#D6CCB4]/60 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedContactProp(prop);
+                          setIsContactModalOpen(true);
+                        }}
+                        className="flex-1 py-2.5 px-3 rounded-xl bg-[#E85D04] hover:bg-[#d05303] text-white text-xs font-extrabold transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <span>View Contact &amp; Visit</span>
+                      </button>
 
                       <button
                         type="button"
-                        disabled={user?.account_status === 'SUSPENDED' || user?.account_status === 'BLOCKED'}
-                        className={`pk-view-details-btn ${user?.account_status === 'SUSPENDED' ? 'is-suspended' : user?.account_status === 'BLOCKED' ? 'is-blocked' : ''}`}
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (user?.account_status === 'SUSPENDED') {
-                            showToast('⚠️ Your account is suspended for rule violation (Strike 1). View Details is disabled. Open the NestAI chatbot to submit an unblock appeal.');
-                            return;
-                          }
-                          if (user?.account_status === 'BLOCKED') {
-                            showToast('⛔ Your account is permanently blocked (Strike 2) due to repeated rule violations.');
-                            return;
-                          }
-                          navigate(`/tenant/property/${prop.id}`);
+                          showToast('Report submitted: Listing verification team notified.');
                         }}
+                        title="Report if brokerage is requested"
+                        className="py-2.5 px-3 rounded-xl bg-[#E6DEC9] hover:bg-rose-100 text-slate-600 hover:text-rose-700 text-xs font-bold transition cursor-pointer"
                       >
-                        {user?.account_status === 'SUSPENDED' ? (
-                          <span>⚠️ Access Suspended</span>
-                        ) : user?.account_status === 'BLOCKED' ? (
-                          <span>⛔ Account Blocked</span>
-                        ) : (
-                          <>
-                            <span>View Details</span>
-                            <span>→</span>
-                          </>
-                        )}
+                        <i className="fa-solid fa-flag"></i>
                       </button>
                     </div>
                   </article>
@@ -2572,345 +2680,29 @@ export default function TenantHome() {
               })}
             </div>
 
-            {/* BELOW LISTINGS: 6 FACILITYKART SERVICES PREVIEW STRIP */}
-            <section className="pk-service-tiles-shell" aria-label="Essential Home Services">
-              <div className="pk-service-strip-head">
-                <div>
-                  <div className="pk-tag-row">
-                    <span className="pk-tag-green">FacilityKart</span>
-                    {isRestricted && (
-                      <span style={{
-                        background: isBlocked ? '#fee2e2' : '#fef3c7',
-                        color: isBlocked ? '#991b1b' : '#92400e',
-                        fontSize: '11px',
-                        fontWeight: 800,
-                        padding: '3px 9px',
-                        borderRadius: '9999px',
-                        border: `1px solid ${isBlocked ? '#fca5a5' : '#fde68a'}`,
-                        marginLeft: '8px'
-                      }}>
-                        {isBlocked ? '⛔ Services Blocked' : '⚠️ Services Suspended'}
-                      </span>
-                    )}
-                  </div>
-                  <h3 style={{ fontSize: '24px', fontWeight: 900, color: '#111827', margin: 0 }}>
-                    Everyday <span style={{ color: '#14532D' }}>Home &amp; Living Services</span>
-                  </h3>
-                  <p style={{ fontSize: '13px', color: '#6b7280', margin: '4px 0 0' }}>
-                    From on-demand home repairs and household assistance to daily doorstep deliveries,
-                    insured shifting, and 24/7 emergency support.
-                  </p>
-                </div>
+            {/* ========================================================================= */}
+            {/* SECTION: FACILITIES & EVERYDAY SERVICES (CAROUSEL + 20+ SERVICES GRID)  */}
+            {/* ========================================================================= */}
+            <FacilitiesCarousel
+              onAddToCart={handleAddToCart}
+              onOpenDrawer={() => setIsServiceDrawerOpen(true)}
+            />
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span
-                    style={{
-                      background: '#F5F0E6',
-                      border: '1px solid #EBE3D3',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      padding: '6px 12px',
-                      borderRadius: '10px',
-                    }}
-                  >
-                    ✓ Verified Professionals
-                  </span>
-                  <button
-                    type="button"
-                    className="pk-view-details-btn"
-                    style={{
-                      width: 'auto',
-                      background: isBlocked ? '#dc2626' : isSuspended ? '#d97706' : '#14532D',
-                      padding: '9px 18px',
-                      cursor: isRestricted ? 'not-allowed' : 'pointer',
-                      opacity: isRestricted ? 0.85 : 1,
-                    }}
-                    onClick={() => {
-                      if (handleRestrictedAction('FacilityKart')) return;
-                      setActivePillar('FacilityKart');
-                    }}
-                  >
-                    {isRestricted ? (
-                      <span>🔒 FacilityKart Locked</span>
-                    ) : (
-                      <>
-                        <span>Open FacilityKart</span>
-                        <span>→</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
+            {/* ========================================================================= */}
+            {/* SECTION: POINTKEY LOCKER & FINANCIAL HUB (PICKBILLS, DOCSTORE, ACC)      */}
+            {/* ========================================================================= */}
+            <PointKeyLocker onOpenAuth={openAuthModal} />
 
-              <div className="pk-service-tiles-grid">
-                {/* 1. HomeService */}
-                <div
-                  className={`pk-service-tile ${isRestricted ? 'is-disabled' : selectedService === 'HomeService' ? 'highlighted' : ''}`}
-                  onClick={() => {
-                    if (handleRestrictedAction('HomeService')) return;
-                    setSelectedService('HomeService');
-                    showToast('HomeService (Home & Repair Support) selected in FacilityKart');
-                  }}
-                  title={isRestricted ? 'Service disabled due to account penalty' : 'HomeService'}
-                >
-                  <span className="pk-service-icon">{isRestricted ? '🔒' : '🛠️'}</span>
-                  <span className="pk-service-title">HomeService</span>
-                  <span className="pk-service-sub">{isRestricted ? '(Disabled)' : '(Home & Repair Support)'}</span>
-                </div>
-
-                {/* 2. HouseKeeping */}
-                <div
-                  className={`pk-service-tile ${isRestricted ? 'is-disabled' : selectedService === 'HouseKeeping' ? 'highlighted' : ''}`}
-                  onClick={() => {
-                    if (handleRestrictedAction('HouseKeeping')) return;
-                    setSelectedService('HouseKeeping');
-                    showToast('HouseKeeping (Household Assistance) selected in FacilityKart');
-                  }}
-                  title={isRestricted ? 'Service disabled due to account penalty' : 'HouseKeeping'}
-                >
-                  <span className="pk-service-icon">{isRestricted ? '🔒' : '🧹'}</span>
-                  <span className="pk-service-title">HouseKeeping</span>
-                  <span className="pk-service-sub">{isRestricted ? '(Disabled)' : '(Household Assistance)'}</span>
-                </div>
-
-                {/* 3. DoorDrop */}
-                <div
-                  className={`pk-service-tile ${isRestricted ? 'is-disabled' : selectedService === 'DoorDrop' ? 'highlighted' : ''}`}
-                  onClick={() => {
-                    if (handleRestrictedAction('DoorDrop')) return;
-                    setSelectedService('DoorDrop');
-                    showToast('DoorDrop (Daily Deliveries) selected in FacilityKart');
-                  }}
-                  title={isRestricted ? 'Service disabled due to account penalty' : 'DoorDrop'}
-                >
-                  <span className="pk-service-icon">{isRestricted ? '🔒' : '📦'}</span>
-                  <span className="pk-service-title">DoorDrop</span>
-                  <span className="pk-service-sub">{isRestricted ? '(Disabled)' : '(Daily Deliveries)'}</span>
-                </div>
-
-                {/* 4. GharSafar */}
-                <div
-                  className={`pk-service-tile ${isRestricted ? 'is-disabled' : selectedService === 'GharSafar' ? 'highlighted' : ''}`}
-                  onClick={() => {
-                    if (handleRestrictedAction('GharSafar')) return;
-                    setSelectedService('GharSafar');
-                    showToast('GharSafar (Shifting & Packing) selected in FacilityKart');
-                  }}
-                  title={isRestricted ? 'Service disabled due to account penalty' : 'GharSafar'}
-                >
-                  <span className="pk-service-icon">{isRestricted ? '🔒' : '🚚'}</span>
-                  <span className="pk-service-title">GharSafar</span>
-                  <span className="pk-service-sub">{isRestricted ? '(Disabled)' : '(Shifting & Packing)'}</span>
-                </div>
-
-                {/* 5. LifeLine */}
-                <div
-                  className={`pk-service-tile ${isRestricted ? 'is-disabled' : selectedService === 'LifeLine' ? 'highlighted' : ''}`}
-                  onClick={() => {
-                    if (handleRestrictedAction('LifeLine Emergency Desk')) return;
-                    setSelectedService('LifeLine');
-                    showToast('LifeLine (Emergency Support) selected in FacilityKart');
-                  }}
-                  title={isRestricted ? 'Service disabled due to account penalty' : 'LifeLine'}
-                >
-                  <span className="pk-service-icon">{isRestricted ? '🔒' : '🚨'}</span>
-                  <span className="pk-service-title">LifeLine</span>
-                  <span className="pk-service-sub">{isRestricted ? '(Disabled)' : '(Emergency Support)'}</span>
-                </div>
-
-                {/* 6. Explore More */}
-                <div
-                  className={`pk-service-tile ${isRestricted ? 'is-disabled' : ''}`}
-                  style={{ background: '#FAF8F4' }}
-                  onClick={() => {
-                    if (handleRestrictedAction('FacilityKart Services')) return;
-                    setActivePillar('FacilityKart');
-                  }}
-                  title={isRestricted ? 'Services disabled due to account penalty' : 'Explore More'}
-                >
-                  <span className="pk-service-icon">{isRestricted ? '🔒' : '✦'}</span>
-                  <span className="pk-service-title">Explore More</span>
-                  <span className="pk-service-sub">{isRestricted ? '(Disabled)' : 'All FacilityKart Services'}</span>
-                </div>
-              </div>
-            </section>
-
-            {/* BELOW SERVICES: BUDGETKART SHOWCASE BANNER (MY EXPENSES) */}
-            <section className="pk-budget-showcase-shell" aria-label="My Expenses — BudgetKart">
-              <div>
-                <div className="pk-tag-row">
-                  <span className="pk-tag-orange">BudgetKart</span>
-                </div>
-                <h3 style={{ fontSize: '32px', fontWeight: 900, margin: '6px 0 0' }}>
-                  My <span style={{ color: '#fb923c' }}>Expenses</span>
-                </h3>
-
-                <ul className="pk-showcase-bullets">
-                  <li className="pk-bullet-item">
-                    <span className="pk-bullet-icon">🏠</span>
-                    <span>Track monthly rent &amp; security deposit milestones in one view</span>
-                  </li>
-                  <li className="pk-bullet-item">
-                    <span className="pk-bullet-icon">🤝</span>
-                    <span>Split shared flatmate bills fairly with instant settlement status</span>
-                  </li>
-                  <li className="pk-bullet-item">
-                    <span className="pk-bullet-icon">⚡</span>
-                    <span>Log utility, Wi-Fi &amp; FacilityKart service expenses effortlessly</span>
-                  </li>
-                  <li className="pk-bullet-item">
-                    <span className="pk-bullet-icon">🧾</span>
-                    <span>Generate &amp; download instant HRA rent receipts anytime</span>
-                  </li>
-                </ul>
-
-                <button
-                  type="button"
-                  className="pk-open-budget-btn"
-                  style={{
-                    background: isBlocked ? '#dc2626' : isSuspended ? '#d97706' : '#EA580C',
-                    cursor: isRestricted ? 'not-allowed' : 'pointer',
-                    opacity: isRestricted ? 0.85 : 1,
-                  }}
-                  onClick={() => {
-                    if (handleRestrictedAction('BudgetKart')) return;
-                    setActivePillar('BudgetKart');
-                  }}
-                >
-                  {isRestricted ? (
-                    <span>🔒 BudgetKart Locked</span>
-                  ) : (
-                    <>
-                      <span>Open BudgetKart</span>
-                      <span>→</span>
-                    </>
-                  )}
-                </button>
-              </div>
-
-              {/* Monthly Expense Snapshot Card */}
-              <div className="pk-snapshot-card">
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    borderBottom: '1px solid rgba(255,255,255,0.1)',
-                    paddingBottom: '12px',
-                  }}
-                >
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#fdba74', textTransform: 'uppercase' }}>
-                    Monthly Expense Snapshot
-                  </span>
-                  <span
-                    style={{
-                      background: 'rgba(16, 185, 129, 0.2)',
-                      color: '#6ee7b7',
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      padding: '2px 8px',
-                      borderRadius: '9999px',
-                    }}
-                  >
-                    Nov 2026
-                  </span>
-                </div>
-
-                <div style={{ marginTop: '16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-                    <span style={{ fontSize: '28px', fontWeight: 900 }}>
-                      ₹{monthlyTrackedExpense.toLocaleString('en-IN')}
-                    </span>
-                    <span style={{ fontSize: '12px', color: '#94a3b8' }}>/ mo tracked</span>
-                  </div>
-                  <p style={{ fontSize: '12px', color: '#fed7aa', margin: '4px 0 0' }}>
-                    {Math.round((monthlyTrackedExpense / monthlyBudgetLimit) * 100)}% of ₹
-                    {monthlyBudgetLimit.toLocaleString('en-IN')} budget used
-                  </p>
-
-                  <div className="pk-progress-bar-shell">
-                    <div
-                      className="pk-progress-fill"
-                      style={{
-                        width: `${Math.min(
-                          100,
-                          Math.round((monthlyTrackedExpense / monthlyBudgetLimit) * 100)
-                        )}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* Quick Add Expense Input Row */}
-                <form onSubmit={handleQuickAddExpense} className="pk-quick-expense-form">
-                  <input
-                    type="text"
-                    placeholder={isRestricted ? '🔒 Expense tracking disabled' : 'Expense (e.g. Wi-Fi, Maid)'}
-                    className="pk-quick-input"
-                    style={{ flex: 1, opacity: isRestricted ? 0.6 : 1, cursor: isRestricted ? 'not-allowed' : 'text' }}
-                    value={quickLabel}
-                    disabled={isRestricted}
-                    onChange={(e) => setQuickLabel(e.target.value)}
-                  />
-                  <input
-                    type="number"
-                    placeholder="₹ Amt"
-                    className="pk-quick-input"
-                    style={{ width: '90px', opacity: isRestricted ? 0.6 : 1, cursor: isRestricted ? 'not-allowed' : 'text' }}
-                    value={quickAmount}
-                    disabled={isRestricted}
-                    onChange={(e) => setQuickAmount(e.target.value)}
-                  />
-                  <button
-                    type="submit"
-                    disabled={isRestricted}
-                    className="pk-quick-add-btn"
-                    style={{
-                      opacity: isRestricted ? 0.6 : 1,
-                      cursor: isRestricted ? 'not-allowed' : 'pointer',
-                      background: isRestricted ? '#64748b' : undefined,
-                    }}
-                  >
-                    {isRestricted ? 'Locked' : '+ Add'}
-                  </button>
-                </form>
-
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    marginTop: '12px',
-                    fontSize: '11px',
-                    color: '#94a3b8',
-                  }}
-                >
-                  <span>
-                    {isRestricted
-                      ? '🔒 Expense tracking disabled due to account penalty'
-                      : expenseLedger.length === 0
-                      ? 'No expenses tracked yet • Add below'
-                      : `Latest: ${expenseLedger[0].label} (₹${expenseLedger[0].amount.toLocaleString('en-IN')})`}
-                  </span>
-                  <button
-                    type="button"
-                    style={{
-                      background: 'transparent',
-                      border: 0,
-                      color: isRestricted ? '#94a3b8' : '#fdba74',
-                      fontWeight: 700,
-                      cursor: isRestricted ? 'not-allowed' : 'pointer',
-                    }}
-                    onClick={() => {
-                      if (handleRestrictedAction('BudgetKart ledger')) return;
-                      setActivePillar('BudgetKart');
-                    }}
-                  >
-                    Full ledger →
-                  </button>
-                </div>
-              </div>
-            </section>
+            {/* ========================================================================= */}
+            {/* SECTION: LIVE SMART PROPERTY MATCHING ENGINE                            */}
+            {/* ========================================================================= */}
+            <SmartPropertyMatching
+              listings={displayListings.length ? displayListings : properties}
+              selectedCity={selectedCity}
+              selectedCategory={selectedCategory}
+              searchQuery={searchQuery}
+              onSelectProperty={(p) => navigate(`/tenant/property/${p.id}`)}
+            />
 
             {/* RENT RELATED QUESTIONS & ANSWERS (FAQ ACCORDION) */}
             <section className="pk-faq-shell" id="rentFaqSection" aria-label="Rent Related Questions">
@@ -3798,6 +3590,29 @@ export default function TenantHome() {
           </div>
         </div>
       </footer>
+
+      {/* ========================================================================= */}
+      {/* NEW PROTOTYPE MODALS                                                      */}
+      {/* ========================================================================= */}
+      <ContactOwnerModal
+        isOpen={isContactModalOpen}
+        property={selectedContactProp}
+        onClose={() => setIsContactModalOpen(false)}
+        onScheduled={(p, d, s) =>
+          showToast(`Direct visit requested for ${p.title} on ${d} (${s})!`)
+        }
+      />
+
+      <VerificationModal
+        isOpen={isVerificationModalOpen}
+        onClose={() => setIsVerificationModalOpen(false)}
+      />
+
+      <ServiceDrawer
+        isOpen={isServiceDrawerOpen}
+        onClose={() => setIsServiceDrawerOpen(false)}
+        onCartCountChange={() => window.dispatchEvent(new Event('prent_cart_updated'))}
+      />
 
       {/* FLOATING NESTAI / HOMEMATE CHATBOT (BOTTOM RIGHT) */}
       <HomeMateChatbot

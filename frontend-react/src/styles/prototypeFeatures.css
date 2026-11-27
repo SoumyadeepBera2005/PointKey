@@ -1,0 +1,378 @@
+/* ========================================================================= */
+/* PROTOTYPE FEATURES, ANIMATIONS & SECTION STYLES                           */
+/* ========================================================================= */
+
+/* Persona & Property Marketplace Cards */
+.marketplace-card {
+  background-color: #EFE8DA;
+  border: 1px solid #D6CCB4;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.marketplace-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 28px -8px rgba(11, 37, 69, 0.14);
+  border-color: #13315C;
+}
+
+/* Service Carousel & Slides */
+#servicesExplore {
+  scroll-margin-top: 6rem;
+}
+
+.srv-slide {
+  flex: 0 0 100%;
+  transition: opacity 0.6s ease, transform 0.6s ease, filter 0.6s ease;
+}
+
+@media (min-width: 640px) {
+  .srv-slide {
+    flex-basis: 100%;
+  }
+}
+
+.srv-slide.is-active .srv-anim {
+  animation: srvFadeUp 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(var(--d, 0) * 90ms);
+}
+
+.srv-chip {
+  animation: srvFloat 5s ease-in-out infinite;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.srv-chip:hover {
+  transform: scale(1.08);
+  box-shadow: 0 14px 30px -8px rgba(0, 0, 0, 0.35);
+  animation-play-state: paused;
+}
+
+.srv-glow {
+  animation: srvGlow 7s ease-in-out infinite;
+}
+
+.srv-cta i {
+  transition: transform 0.3s ease;
+}
+
+.srv-cta:hover i {
+  transform: translateX(5px);
+}
+
+.srv-thumb {
+  flex: 0 0 auto;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+  opacity: 0.8;
+}
+
+.srv-thumb:hover {
+  transform: translateY(-3px);
+  opacity: 1;
+}
+
+.srv-thumb.is-active {
+  opacity: 1;
+}
+
+.srv-thumb .srv-thumb-box {
+  border: 2px solid transparent;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.srv-thumb.is-active .srv-thumb-box {
+  border-color: #0b2545;
+  box-shadow: 0 8px 20px -8px rgba(11, 37, 69, 0.5);
+}
+
+.srv-thumb .srv-thumb-icon {
+  transition: transform 0.4s ease;
+}
+
+.srv-thumb:hover .srv-thumb-icon {
+  transform: scale(1.18) rotate(-6deg);
+}
+
+.srv-thumb .srv-progress {
+  width: 0;
+}
+
+.srv-thumb.is-active .srv-progress {
+  animation: srvProgress 6s linear forwards;
+}
+
+#srvCarouselWrap:hover .srv-progress,
+.srv-paused .srv-progress {
+  animation-play-state: paused;
+}
+
+.srv-nav-btn {
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.srv-nav-btn:hover {
+  transform: translateY(-50%) scale(1.1);
+  box-shadow: 0 10px 24px -6px rgba(11, 37, 69, 0.45);
+}
+
+/* Service Card Themes */
+.srv-card {
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.35s ease, border-color 0.35s ease;
+  border-radius: 1.25rem;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.srv-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 3.5px;
+  background: linear-gradient(90deg, var(--hv), var(--hv2));
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.4s ease;
+}
+
+.srv-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 20px 38px -14px rgba(11, 37, 69, 0.25);
+  border-color: var(--hv) !important;
+}
+
+.srv-card:hover::before {
+  transform: scaleX(1);
+}
+
+.srv-cat-essentials {
+  --hv: #e85d04;
+  --hv2: #f48c06;
+  --bg: #fffbf7;
+  --bd: #fed7aa;
+  --tx: #c2410c;
+}
+
+.srv-cat-homecare {
+  --hv: #166534;
+  --hv2: #22c55e;
+  --bg: #f7fee7;
+  --bd: #bbf7d0;
+  --tx: #15803d;
+}
+
+.srv-cat-lifestyle {
+  --hv: #4f46e5;
+  --hv2: #818cf8;
+  --bg: #f5f3ff;
+  --bd: #ddd6fe;
+  --tx: #4338ca;
+}
+
+.srv-cat-shifting {
+  --hv: #ea580c;
+  --hv2: #f97316;
+  --bg: #fff7ed;
+  --bd: #ffedd5;
+  --tx: #c2410c;
+}
+
+.srv-cat-emergency {
+  --hv: #dc2626;
+  --hv2: #f43f5e;
+  --bg: #fef2f2;
+  --bd: #fecaca;
+  --tx: #b91c1c;
+}
+
+.srv-card.srv-cat-essentials,
+.srv-card.srv-cat-homecare,
+.srv-card.srv-cat-lifestyle,
+.srv-card.srv-cat-shifting,
+.srv-card.srv-cat-emergency {
+  background-color: var(--bg);
+  border: 1px solid var(--bd);
+}
+
+.srv-card .srv-icon {
+  transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.3s ease, color 0.3s ease;
+}
+
+.srv-card:hover .srv-icon {
+  transform: rotate(-10deg) scale(1.12);
+  background-color: var(--hv);
+  color: #fff;
+}
+
+.srv-card .srv-addbtn {
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.srv-card .srv-addbtn:active {
+  transform: scale(0.94);
+}
+
+.srv-card .srv-addbtn.srv-added {
+  background-color: #166534 !important;
+}
+
+.srv-card-emg:hover .srv-icon {
+  background-color: var(--hv);
+  animation: srvRing 1.2s ease-out infinite;
+}
+
+/* Photo & Illustrations */
+.srv-art {
+  animation: srvFloat 7s ease-in-out infinite;
+}
+
+.srv-art svg {
+  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+  filter: drop-shadow(0 18px 22px rgba(0, 0, 0, 0.28));
+}
+
+.srv-slide:hover .srv-art svg {
+  transform: scale(1.05) translateY(-4px);
+}
+
+.srv-twinkle {
+  animation: srvTwinkle 2.4s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.srv-blink {
+  animation: srvBlink 1s steps(1) infinite;
+}
+
+.srv-photo {
+  transition: opacity 0.9s ease, transform 1.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.srv-slide.is-active .srv-photo {
+  animation: srvKen 14s ease-in-out infinite alternate;
+}
+
+.srv-slide:hover .srv-photo {
+  animation-play-state: paused;
+  transform: scale(1.06);
+}
+
+/* Live Smart Property Matching */
+.pk-live-scan {
+  animation: pkLiveScan 2.8s ease-in-out infinite;
+}
+
+.pk-live-pulse {
+  animation: pkLivePulse 2s ease-in-out infinite;
+}
+
+.pk-check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  transition: background 0.3s ease, border-color 0.3s ease;
+}
+
+.pk-check-row.is-current {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.pk-check-row.is-done {
+  background: rgba(16, 185, 129, 0.2);
+}
+
+.pk-check-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+.pk-check-row.is-done .pk-check-icon {
+  background: #10b981;
+  color: #fff;
+}
+
+/* Keyframes */
+@keyframes srvFadeUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes srvFloat {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-8px) rotate(-1.5deg); }
+}
+
+@keyframes srvGlow {
+  0%, 100% { opacity: 0.35; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.15); }
+}
+
+@keyframes srvProgress {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+@keyframes srvWiggle {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(-14deg) scale(1.2); }
+  75% { transform: rotate(10deg) scale(1.2); }
+}
+
+@keyframes srvPop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.4); }
+  100% { transform: scale(1); }
+}
+
+@keyframes srvRing {
+  0% { box-shadow: 0 0 0 0 rgba(225, 29, 72, 0.55); }
+  100% { box-shadow: 0 0 0 14px rgba(225, 29, 72, 0); }
+}
+
+@keyframes srvTwinkle {
+  0%, 100% { opacity: 0.35; transform: scale(0.7); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+@keyframes srvBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.12; }
+}
+
+@keyframes srvKen {
+  from { transform: scale(1); }
+  to { transform: scale(1.09); }
+}
+
+@keyframes pkLiveScan {
+  0% { transform: translateY(-120%); opacity: 0; }
+  15%, 85% { opacity: 0.85; }
+  100% { transform: translateY(420%); opacity: 0; }
+}
+
+@keyframes pkLivePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.2); }
+  50% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+}
+
+@keyframes lockerRise {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: none; }
+}

@@ -55,6 +55,22 @@ export default function Navbar({
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
+  // Sync service bag count on custom event or storage change
+  useEffect(() => {
+    const handleCartSync = () => {
+      try {
+        const cart = JSON.parse(localStorage.getItem('prent_service_cart') || '{}');
+        setServiceCartCount(Object.values(cart).reduce((a, b) => a + Number(b || 0), 0));
+      } catch {}
+    };
+    window.addEventListener('prent_cart_updated', handleCartSync);
+    window.addEventListener('storage', handleCartSync);
+    return () => {
+      window.removeEventListener('prent_cart_updated', handleCartSync);
+      window.removeEventListener('storage', handleCartSync);
+    };
+  }, []);
+
   const locationRef = useRef(null);
   const notifyRef = useRef(null);
   const profileRef = useRef(null);

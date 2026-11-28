@@ -2210,9 +2210,6 @@ export default function TenantHome() {
             <h1 className="hero-text-shadow text-3xl sm:text-5xl font-extrabold text-white tracking-tight leading-tight">
               Find Direct <span className="hero-word">Flats</span>, <span className="hero-word">PGs</span> &amp; <span className="hero-word">Rooms</span> — Zero Brokerage
             </h1>
-            <p className="hero-text-shadow text-white/95 text-sm sm:text-base mt-3 max-w-2xl mx-auto leading-relaxed">
-              Settled in? Book doorstep home services too: 20L water jars, homemade tiffin, laundry pickup, room cleaning, electrician/plumber and Wi-Fi setup, all from one place.
-            </p>
           </div>
 
           {/* Hero Search Box (Matching Image 1 Design) */}

@@ -30,6 +30,7 @@ router.patch('/profile', authMiddleware, updateProfile);
 
 // ইউজার নোটিফিকেশন এন্ডপয়েন্ট
 router.get('/notifications', authMiddleware, getNotifications);
+router.post('/notifications/read', authMiddleware, markNotificationsRead);
 router.patch('/notifications/read-all', authMiddleware, markNotificationsRead);
 
 // ইউজার আনব্লক আপিল আবেদন সাবমিট এন্ডপয়েন্ট

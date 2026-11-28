@@ -35,7 +35,7 @@ export default function PropertyCard({ property }) {
     >
       <div className="relative h-44 overflow-hidden bg-slate-200">
         <img
-          src={p.cover_url || COVER_FALLBACK}
+          src={p.cover_url || p.image || (Array.isArray(p.photos) ? p.photos[0]?.url : null) || (Array.isArray(p.media) ? p.media[0]?.media_url : null) || COVER_FALLBACK}
           alt={p.title}
           onError={(e) => {
             e.currentTarget.src = COVER_FALLBACK;

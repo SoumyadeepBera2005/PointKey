@@ -6,6 +6,7 @@ import HomeMateChatbot from '../../components/ai/HomeMateChatbot';
 import { SAMPLE_PROPERTIES } from '../../data/sampleProperties';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
+import { subscribeRealtime } from '../../services/realtimeSync';
 import '../../styles/prototypeFeatures.css';
 import PersonaCards from '../../components/home/PersonaCards';
 import FacilitiesCarousel from '../../components/home/FacilitiesCarousel';
@@ -558,11 +559,15 @@ export default function TenantHome() {
     const syncVerified = () => {
       try {
         setVerifiedCustomProps(JSON.parse(localStorage.getItem('prent_verified_admin_properties') || '[]'));
-      } catch {}
+      } catch { }
     };
+    const unsubscribe = subscribeRealtime((event) => {
+      syncVerified();
+    });
     window.addEventListener('prent_property_verified', syncVerified);
     window.addEventListener('storage', syncVerified);
     return () => {
+      unsubscribe();
       window.removeEventListener('prent_property_verified', syncVerified);
       window.removeEventListener('storage', syncVerified);
     };
@@ -2279,8 +2284,8 @@ export default function TenantHome() {
                 scrollToListings();
               }}
               className={`min-w-[96px] px-5 py-2.5 rounded-full font-extrabold text-sm border shadow-lg transition hover:-translate-y-0.5 cursor-pointer flex items-center justify-center gap-1.5 ${selectedCategory === 'All'
-                  ? 'bg-[#FF9A1F] text-white border-[#FF9A1F]'
-                  : 'bg-white/95 hover:bg-white text-[#0b2545] border-white'
+                ? 'bg-[#FF9A1F] text-white border-[#FF9A1F]'
+                : 'bg-white/95 hover:bg-white text-[#0b2545] border-white'
                 }`}
             >
               <span>✨ All</span>
@@ -2292,8 +2297,8 @@ export default function TenantHome() {
                 scrollToListings();
               }}
               className={`min-w-[96px] px-5 py-2.5 rounded-full font-extrabold text-sm border shadow-lg transition hover:-translate-y-0.5 cursor-pointer flex items-center justify-center gap-1.5 ${selectedCategory === 'Flats'
-                  ? 'bg-[#FF9A1F] text-white border-[#FF9A1F]'
-                  : 'bg-white/95 hover:bg-white text-[#0b2545] border-white'
+                ? 'bg-[#FF9A1F] text-white border-[#FF9A1F]'
+                : 'bg-white/95 hover:bg-white text-[#0b2545] border-white'
                 }`}
             >
               <span className="text-[#ea580c]">🏢</span>
@@ -2306,8 +2311,8 @@ export default function TenantHome() {
                 scrollToListings();
               }}
               className={`min-w-[96px] px-5 py-2.5 rounded-full font-extrabold text-sm border shadow-lg transition hover:-translate-y-0.5 cursor-pointer flex items-center justify-center gap-1.5 ${selectedCategory === 'PG'
-                  ? 'bg-[#FF9A1F] text-white border-[#FF9A1F]'
-                  : 'bg-white/95 hover:bg-white text-[#0b2545] border-white'
+                ? 'bg-[#FF9A1F] text-white border-[#FF9A1F]'
+                : 'bg-white/95 hover:bg-white text-[#0b2545] border-white'
                 }`}
             >
               <span className="text-[#ea580c]">🛏️</span>
@@ -2320,8 +2325,8 @@ export default function TenantHome() {
                 scrollToListings();
               }}
               className={`min-w-[96px] px-5 py-2.5 rounded-full font-extrabold text-sm border shadow-lg transition hover:-translate-y-0.5 cursor-pointer flex items-center justify-center gap-1.5 ${selectedCategory === 'Rooms'
-                  ? 'bg-[#FF9A1F] text-white border-[#FF9A1F]'
-                  : 'bg-white/95 hover:bg-white text-[#0b2545] border-white'
+                ? 'bg-[#FF9A1F] text-white border-[#FF9A1F]'
+                : 'bg-white/95 hover:bg-white text-[#0b2545] border-white'
                 }`}
             >
               <span className="text-[#ea580c]">🚪</span>
@@ -2524,7 +2529,9 @@ export default function TenantHome() {
                       <div className="relative h-48 bg-[#E6DEC9] overflow-hidden">
                         <img
                           src={
+                            prop.cover_url ||
                             prop.image ||
+                            (Array.isArray(prop.photos) ? prop.photos[0]?.url : null) ||
                             'https://housing-images.n7net.in/01c16c28/eeed79bf947f40eba111e6b8b2f6fc78/v0/medium/1_rk_apartment-for-rent-mohishgot-Kolkata-bedroom.jpg'
                           }
                           alt={prop.title}
@@ -2564,8 +2571,8 @@ export default function TenantHome() {
                           type="button"
                           onClick={(e) => toggleFavorite(e, prop)}
                           className={`absolute top-3 right-3 w-8 h-8 rounded-full ${isFav
-                              ? 'bg-[#E85D04] text-white'
-                              : 'bg-white/90 text-[#0B2545] hover:bg-white'
+                            ? 'bg-[#E85D04] text-white'
+                            : 'bg-white/90 text-[#0B2545] hover:bg-white'
                             } flex items-center justify-center shadow-xs transition cursor-pointer z-10`}
                           title={isFav ? 'Saved' : 'Save Property'}
                         >
@@ -2622,8 +2629,8 @@ export default function TenantHome() {
                               <span
                                 key={rIdx}
                                 className={`px-2.5 py-1 rounded-md text-[11px] font-bold ${isBachelor
-                                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-600/25'
-                                    : 'bg-[#E6DEC9] text-[#0B2545]'
+                                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-600/25'
+                                  : 'bg-[#E6DEC9] text-[#0B2545]'
                                   }`}
                               >
                                 {rule}
@@ -2640,12 +2647,13 @@ export default function TenantHome() {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setSelectedContactProp(prop);
-                          setIsContactModalOpen(true);
+                          if (handleRestrictedAction('View Details')) return;
+                          handleCardClick(prop);
                         }}
                         className="flex-1 py-2.5 px-3 rounded-xl bg-[#E85D04] hover:bg-[#d05303] text-white text-xs font-extrabold transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                       >
-                        <span>View Contact &amp; Visit</span>
+                        <span>View Details</span>
+                        <i className="fa-solid fa-arrow-right text-[11px]"></i>
                       </button>
 
                       <button

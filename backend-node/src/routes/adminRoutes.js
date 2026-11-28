@@ -2,8 +2,8 @@ const express = require('express');
 const { authMiddleware, requireRole } = require('../middlewares/authMiddleware');
 const { uploadMiddleware } = require('../middlewares/uploadMiddleware');
 const { createReport, reportQueue, resolveReport, reviewOwnerVerification,
-  revenue, listUsers, setUserStatus, permanentDeleteUser, verificationQueue, verifyProperty, pendingProperties,
-  faceVerify } = require('../controllers/adminController');
+  revenue, listUsers, getUserActivity, setUserStatus, permanentDeleteUser, verificationQueue, verifyProperty, pendingProperties,
+  faceVerify, listAllProperties, adminUpdateBookingStatus, adminUpdateProperty, adminDeleteProperty } = require('../controllers/adminController');
 const { rate, myReceivedRatings } = require('../controllers/ratingController');
 
 const router = express.Router();
@@ -32,8 +32,15 @@ router.post('/admin/owner-verifications/:id/review', authMiddleware, requireRole
 router.get('/admin/properties/pending', authMiddleware, requireRole('ADMIN'), pendingProperties);
 router.post('/admin/properties/:id/verify', authMiddleware, requireRole('ADMIN'), verifyProperty);
 
+// Admin: all properties management (booked, unbooked, modify, delete)
+router.get('/admin/properties', authMiddleware, requireRole('ADMIN'), listAllProperties);
+router.patch('/admin/properties/:id/booking', authMiddleware, requireRole('ADMIN'), adminUpdateBookingStatus);
+router.put('/admin/properties/:id', authMiddleware, requireRole('ADMIN'), adminUpdateProperty);
+router.delete('/admin/properties/:id', authMiddleware, requireRole('ADMIN'), adminDeleteProperty);
+
 // Admin: users + revenue
 router.get('/admin/users', authMiddleware, requireRole('ADMIN'), listUsers);
+router.get('/admin/users/:id/activity', authMiddleware, requireRole('ADMIN'), getUserActivity);
 router.patch('/admin/users/:id/status', authMiddleware, requireRole('ADMIN'), setUserStatus);
 router.delete('/admin/users/:id/permanent', authMiddleware, requireRole('ADMIN'), permanentDeleteUser);
 router.get('/admin/revenue', authMiddleware, requireRole('ADMIN'), revenue);

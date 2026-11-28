@@ -82,6 +82,19 @@ export function AuthProvider({ children }) {
           return updated;
         });
 
+        // ইউজার-স্পেসিফিক নোটিফিকেশন লোকালস্টোরেজে সিঙ্ক করা
+        if (data.notification) {
+          try {
+            const userNotifsKey = `prent_user_notifications_${user.id}`;
+            const existing = JSON.parse(localStorage.getItem(userNotifsKey) || '[]');
+            const exists = existing.some((n) => n.id === data.notification.id);
+            if (!exists) {
+              existing.unshift(data.notification);
+              localStorage.setItem(userNotifsKey, JSON.stringify(existing));
+            }
+          } catch {}
+        }
+
         // কাস্টম ইভেন্ট ফায়ার করা যাতে পুরো অ্যাপ (Navbar, Notifications, TenantHome) সাথে সাথে রিঅ্যাক্ট করে
         window.dispatchEvent(new CustomEvent('prent_user_status_changed', { detail: data }));
         if (data.notification) {
@@ -132,6 +145,20 @@ export function AuthProvider({ children }) {
 
     return () => clearInterval(interval);
   }, []);
+
+  // ৪. লোকাল বা ব্যাকএন্ড থেকে ইউজার আপডেট ইভেন্ট লিসেনার
+  useEffect(() => {
+    const handleUserUpdate = (e) => {
+      if (e?.detail) {
+        setUser((prev) => ({ ...(prev || {}), ...e.detail }));
+        localStorage.setItem('prent_user', JSON.stringify(e.detail));
+      } else {
+        refreshUser();
+      }
+    };
+    window.addEventListener('prent_user_updated', handleUserUpdate);
+    return () => window.removeEventListener('prent_user_updated', handleUserUpdate);
+  }, [refreshUser]);
 
   // Step 1: email + mobile → backend sends OTP to the email (passwordless like OYO & Blinkit).
   const login = useCallback(async (email, phone, password = null, role = null) => {

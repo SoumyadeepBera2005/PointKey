@@ -3,8 +3,9 @@ import Navbar from '../../components/common/Navbar';
 import BottomNav from '../../components/common/BottomNav';
 import Badge from '../../components/ui/Badge';
 import Toast from '../../components/common/Toast';
+import UserActivityModal from '../../components/admin/UserActivityModal';
 import api from '../../services/api';
-import { Ban, Trash2, CheckCircle2, UserX, AlertTriangle, ShieldAlert, FileText, X } from 'lucide-react';
+import { Ban, Trash2, CheckCircle2, UserX, AlertTriangle, ShieldAlert, FileText, X, Eye } from 'lucide-react';
 
 /**
  * =============================================================================
@@ -40,13 +41,39 @@ export default function ManageTenants() {
   // আপিল রিভিউ মোডাল স্টেট
   const [reviewAppealUser, setReviewAppealUser] = useState(null);
 
+  // টেন্যান্ট বিস্তারিত ও অ্যাক্টিভিটি মোডাল স্টেট (ভিজিট বুকিং, পেমেন্ট হিস্টোরি ইত্যাদি)
+  const [activityUser, setActivityUser] = useState(null);
+
   const load = () => {
     api.get('/admin/users?role=TENANT')
-      .then(({ data }) => setUsers(data.users || []))
+      .then(({ data }) => {
+        let list = data.users || [];
+        // যে সকল টেন্যান্ট প্রপার্টি পোস্ট করে TENANT+OWNER বা TENANT+BUILDER হয়েছে তারা ওনার সেকশনে প্রদর্শিত হবে
+        list = list.filter((u) => !u.role?.includes('OWNER') && !u.role?.includes('BUILDER'));
+        try {
+          const localPending = JSON.parse(localStorage.getItem('prent_pending_admin_properties') || '[]');
+          const localPosterEmails = new Set(localPending.map((p) => p.owner_email).filter(Boolean));
+          const localPosterPhones = new Set(localPending.map((p) => p.owner_phone || p.phone).filter(Boolean));
+          const localPosterIds = new Set(localPending.map((p) => p.owner_id).filter(Boolean));
+          list = list.filter((u) => !localPosterEmails.has(u.email) && !localPosterPhones.has(u.phone) && !localPosterIds.has(u.id));
+        } catch {}
+        setUsers(list);
+      })
       .catch(() => {});
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    const handleSync = () => load();
+    window.addEventListener('prent_user_updated', handleSync);
+    window.addEventListener('prent_new_pending_property', handleSync);
+    window.addEventListener('storage', handleSync);
+    return () => {
+      window.removeEventListener('prent_user_updated', handleSync);
+      window.removeEventListener('prent_new_pending_property', handleSync);
+      window.removeEventListener('storage', handleSync);
+    };
+  }, []);
 
   // স্ট্রাইক ইস্যু করা (Strike 1 বা Strike 2)
   const handleIssueStrike = async () => {
@@ -62,6 +89,27 @@ export default function ManageTenants() {
         strike_count: isStrike2 ? 2 : 1,
         reason: finalReason,
       });
+
+      // লোকাল নোটিফিকেশন টেন্যান্ট-স্পেসিফিক কী-তে সেভ করা হবে যাতে এডমিনের কাছে না যায়
+      try {
+        const notifItem = {
+          id: `notif-${Date.now()}`,
+          user_id: strikeModalUser.id,
+          type: isStrike2 ? 'ACCOUNT_BLOCKED' : 'ACCOUNT_SUSPENDED',
+          title: isStrike2 ? '⛔ Account Permanently Blocked (Strike 2)' : '⚠️ Account Suspended by Admin (Strike 1)',
+          message: isStrike2
+            ? `Admin has permanently blocked your account: "${finalReason}". All platform privileges are terminated.`
+            : `Admin has suspended your account (Strike 1) for: "${finalReason}". View Details and payments are disabled. Open NestAI to submit rules appeal.`,
+          is_read: false,
+          created_at: new Date().toISOString(),
+        };
+        const userNotifsKey = `prent_user_notifications_${strikeModalUser.id}`;
+        const existingNotifs = JSON.parse(localStorage.getItem(userNotifsKey) || '[]');
+        existingNotifs.unshift(notifItem);
+        localStorage.setItem(userNotifsKey, JSON.stringify(existingNotifs));
+        localStorage.removeItem('prent_user_notifications');
+      } catch {}
+
       setToast({
         type: 'success',
         message: isStrike2
@@ -170,12 +218,24 @@ export default function ManageTenants() {
                 const hasPendingAppeal = isSuspended && u.unblock_appeal_status === 'SUBMITTED';
 
                 return (
-                  <tr key={u.id} className="bg-white shadow-sm transition hover:shadow-md">
-                    <td className="rounded-l-xl px-3 py-3">
-                      <p className="font-bold text-slate-800">{u.full_name}</p>
-                      <p className="text-[11px] text-slate-400">{u.email}</p>
+                  <tr key={u.id} className="bg-white shadow-sm transition hover:shadow-md hover:bg-slate-50/50">
+                    <td className="rounded-l-xl px-3 py-3 cursor-pointer" onClick={() => setActivityUser(u)}>
+                      <div className="flex items-center gap-2">
+                        <div>
+                          <p className="font-bold text-slate-800 hover:text-sky-700 flex items-center gap-1.5 flex-wrap">
+                            {u.full_name}
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-extrabold border border-slate-300">
+                              TENANT
+                            </span>
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-sky-50 text-sky-700 font-semibold border border-sky-200">
+                              View Activity 👁️
+                            </span>
+                          </p>
+                          <p className="text-[11px] text-slate-400">{u.email}</p>
+                        </div>
+                      </div>
                     </td>
-                    <td className="px-3 py-3 text-slate-600">{u.phone}</td>
+                    <td className="px-3 py-3 text-slate-600 cursor-pointer" onClick={() => setActivityUser(u)}>{u.phone}</td>
                     
                     {/* স্ট্রাইক ও অ্যাকাউন্ট স্ট্যাটাস */}
                     <td className="px-3 py-3">
@@ -236,6 +296,16 @@ export default function ManageTenants() {
                     {/* এডমিন অ্যাকশন বাটন */}
                     <td className="rounded-r-xl px-3 py-3 text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        {/* অ্যাক্টিভিটি ও ফুল ডিটেইলস বাটন */}
+                        <button
+                          onClick={() => setActivityUser(u)}
+                          title="View Full Tenant Activity & Records"
+                          className="flex items-center gap-1 rounded-lg bg-sky-50 text-sky-800 border border-sky-200 px-2.5 py-1.5 text-xs font-bold hover:bg-sky-100 transition cursor-pointer"
+                        >
+                          <Eye size={13} className="text-sky-700" />
+                          <span>Activity</span>
+                        </button>
+
                         {/* স্ট্রাইক ইস্যু বাটন */}
                         <button
                           onClick={() => {
@@ -498,6 +568,15 @@ export default function ManageTenants() {
           </div>
         </div>
       )}
+
+      {/* টেন্যান্ট ফুল অ্যাক্টিভিটি মোডাল (ভিজিট বুকিং, পেমেন্ট হিস্টোরি, লিস্টিংস ইত্যাদি) */}
+      <UserActivityModal
+        isOpen={Boolean(activityUser)}
+        onClose={() => setActivityUser(null)}
+        user={activityUser}
+        mode="TENANT"
+        onRefresh={load}
+      />
 
       <Toast toast={toast} onDismiss={() => setToast(null)} />
       <BottomNav />

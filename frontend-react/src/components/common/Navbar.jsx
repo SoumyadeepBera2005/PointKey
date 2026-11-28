@@ -79,33 +79,138 @@ export default function Navbar({
 
   // Load notifications from API / socket
   const loadNotifications = useCallback(async () => {
-    const token = localStorage.getItem('prent_token');
-    if (!token) {
-      setNotifications([]);
-      setUnreadCount(0);
-      return;
-    }
+    let combined = [];
+    const isAdmin = user?.role === 'ADMIN';
+
+    // ১. ইউজার-স্পেসিফিক লোকাল নোটিফিকেশন লোড করা
     try {
-      const res = await api.get('/notifications');
-      if (res.data?.success && Array.isArray(res.data.notifications)) {
-        setNotifications(res.data.notifications);
-        setUnreadCount(res.data.unreadCount || res.data.notifications.filter((n) => !n.is_read).length);
+      if (isAdmin) {
+        localStorage.removeItem('prent_user_notifications');
+      }
+      const userKey = user?.id ? `prent_user_notifications_${user.id}` : null;
+      if (userKey) {
+        const localNotifs = JSON.parse(localStorage.getItem(userKey) || '[]');
+        if (Array.isArray(localNotifs)) combined = [...localNotifs];
       }
     } catch {}
-  }, []);
+
+    const token = localStorage.getItem('prent_token');
+    if (token) {
+      try {
+        const res = await api.get('/auth/notifications').catch(() => api.get('/notifications'));
+        const apiNotifs = res.data?.notifications || [];
+        if (Array.isArray(apiNotifs)) {
+          const existingIds = new Set(combined.map((n) => n.id));
+          for (const an of apiNotifs) {
+            if (!existingIds.has(an.id)) {
+              combined.push(an);
+              existingIds.add(an.id);
+            }
+          }
+        }
+      } catch {}
+    }
+
+    // ২. এডমিনের কাছে যেন কোনোভাবেই টেন্যান্ট/ওনারের পেনাল্টি নোটিফিকেশন না আসে
+    if (isAdmin) {
+      const userPenaltyTypes = [
+        'ACCOUNT_BLOCKED',
+        'ACCOUNT_SUSPENDED',
+        'ACCOUNT_RESTORED',
+        'APPEAL_APPROVED',
+        'APPEAL_REJECTED',
+        'PROPERTY_VERIFIED',
+        'PROPERTY_REJECTED',
+        'PROPERTY_UNDER_REVIEW',
+      ];
+      combined = combined.filter((n) => !userPenaltyTypes.includes(n.type));
+    } else {
+      // সাধারণ ব্যবহারকারী (TENANT / OWNER) হলে তার নিজস্ব নোটিফিকেশন ফিল্টার
+      if (user?.id) {
+        combined = combined.filter((n) => !n.user_id || n.user_id === user.id);
+      }
+      // ইউজার বর্তমানে SUSPENDED বা BLOCKED থাকলে নোটিফিকেশন তালিকায় বাধ্যতামূলক সতর্কতা ইনজেক্ট করা হবে
+      if (user?.account_status === 'BLOCKED' || user?.account_status === 'SUSPENDED') {
+        const isBlockedUser = user.account_status === 'BLOCKED';
+        const hasAlert = combined.some((n) => n.type?.includes(isBlockedUser ? 'BLOCK' : 'SUSPEND'));
+        if (!hasAlert) {
+          combined.unshift({
+            id: `alert-status-${Date.now()}`,
+            type: isBlockedUser ? 'ACCOUNT_BLOCKED' : 'ACCOUNT_SUSPENDED',
+            title: isBlockedUser ? '⛔ Account Permanently Blocked (Strike 2)' : '⚠️ Account Suspended by Admin (Strike 1)',
+            message: isBlockedUser
+              ? `Admin has permanently blocked your account: "${user.block_reason || 'Repeated rule violations'}". All platform access is terminated.`
+              : `Your account was suspended by Admin for: "${user.block_reason || 'Rule violation'}". View details, payments, and visits are restricted. Open NestAI to appeal.`,
+            is_read: false,
+            created_at: new Date().toISOString(),
+          });
+        }
+      }
+    }
+
+    setNotifications(combined);
+    const unread = combined.filter((n) => !n.is_read).length;
+    setUnreadCount(
+      unread > 0
+        ? unread
+        : (!isAdmin && (user?.account_status === 'BLOCKED' || user?.account_status === 'SUSPENDED') ? 1 : 0)
+    );
+  }, [user?.id, user?.role, user?.account_status, user?.block_reason]);
 
   useEffect(() => {
     loadNotifications();
-    const socket = getSocket();
-    if (!socket) return;
-    const handleNewNotif = () => loadNotifications();
-    socket.on('notification', handleNewNotif);
-    socket.on('account_status_changed', handleNewNotif);
-    return () => {
-      socket.off('notification', handleNewNotif);
-      socket.off('account_status_changed', handleNewNotif);
+
+    const handleSync = () => loadNotifications();
+    const handleNewNotif = (e) => {
+      if (e?.detail?.user_id && user?.id && e.detail.user_id !== user.id) return;
+      loadNotifications();
     };
-  }, [loadNotifications]);
+    const handleStatusSync = (e) => {
+      if (e?.detail?.userId && user?.id && e.detail.userId !== user.id) return;
+      loadNotifications();
+    };
+
+    window.addEventListener('prent_new_notification', handleNewNotif);
+    window.addEventListener('prent_account_status_changed', handleStatusSync);
+    window.addEventListener('prent_user_status_changed', handleStatusSync);
+    window.addEventListener('prent_user_updated', handleSync);
+    window.addEventListener('storage', handleSync);
+
+    const socket = getSocket();
+    let onNotif = null;
+    let onStatus = null;
+    if (socket) {
+      onNotif = (notif) => {
+        if (notif?.user_id && user?.id && notif.user_id !== user.id) return;
+        loadNotifications();
+      };
+      onStatus = (data) => {
+        if (data?.userId && user?.id && data.userId !== user.id) return;
+        loadNotifications();
+      };
+      socket.on('notification', onNotif);
+      socket.on('new_notification', onNotif);
+      socket.on('account_status_changed', onStatus);
+      socket.on('user_status_sync', onStatus);
+    }
+    return () => {
+      window.removeEventListener('prent_new_notification', handleNewNotif);
+      window.removeEventListener('prent_account_status_changed', handleStatusSync);
+      window.removeEventListener('prent_user_status_changed', handleStatusSync);
+      window.removeEventListener('prent_user_updated', handleSync);
+      window.removeEventListener('storage', handleSync);
+      if (socket) {
+        if (onNotif) {
+          socket.off('notification', onNotif);
+          socket.off('new_notification', onNotif);
+        }
+        if (onStatus) {
+          socket.off('account_status_changed', onStatus);
+          socket.off('user_status_sync', onStatus);
+        }
+      }
+    };
+  }, [loadNotifications, user?.id]);
 
   // Click outside listener for popovers
   useEffect(() => {
@@ -895,6 +1000,15 @@ export default function Navbar({
                         <button
                           type="button"
                           className="nav-mega-btn"
+                          onClick={() => setShowMyPropertiesModal(true)}
+                        >
+                          🏠 My Properties &amp; Verification Tracker
+                        </button>
+                      </li>
+                      <li>
+                        <button
+                          type="button"
+                          className="nav-mega-btn"
                           onClick={() => navigate('/owner')}
                         >
                           Direct Owner Listings
@@ -1213,7 +1327,17 @@ export default function Navbar({
             {/* Post Property Button */}
             <button
               type="button"
-              onClick={() => setShowPostPropertyModal(true)}
+              onClick={() => {
+                if (user?.account_status === 'BLOCKED') {
+                  alert(`⛔ Account Blocked (Strike 2): You cannot post properties.\nReason: "${user.block_reason || 'Rule violation'}"`);
+                  return;
+                }
+                if (user?.account_status === 'SUSPENDED') {
+                  alert(`⚠️ Account Suspended (Strike 1): Property listing is disabled.\nReason: "${user.block_reason || 'Rule violation'}". Open NestAI to submit an unblock appeal.`);
+                  return;
+                }
+                setShowPostPropertyModal(true);
+              }}
               className="pk-post-btn"
             >
               <span>＋</span>
@@ -1238,7 +1362,22 @@ export default function Navbar({
               <div style={{ position: 'relative' }} ref={notifyRef}>
                 <button
                   type="button"
-                  onClick={() => setNotifyOpen(!notifyOpen)}
+                  onClick={() => {
+                    const nextState = !notifyOpen;
+                    setNotifyOpen(nextState);
+                    if (nextState && unreadCount > 0) {
+                      setUnreadCount(0);
+                      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+                      try {
+                        api.post('/notifications/read').catch(() => {});
+                        const userKey = user?.id ? `prent_user_notifications_${user.id}` : null;
+                        if (userKey) {
+                          const local = JSON.parse(localStorage.getItem(userKey) || '[]');
+                          localStorage.setItem(userKey, JSON.stringify(local.map((n) => ({ ...n, is_read: true }))));
+                        }
+                      } catch {}
+                    }
+                  }}
                   className="pk-nav-icon-btn"
                   title="Notifications"
                   aria-label="Notifications"
@@ -1250,7 +1389,7 @@ export default function Navbar({
                 {notifyOpen && (
                   <div
                     className="pk-nav-popover"
-                    style={{ right: 0, width: 'min(320px, calc(100vw - 24px))' }}
+                    style={{ right: 0, width: 'min(360px, calc(100vw - 24px))' }}
                   >
                     <div
                       style={{
@@ -1261,35 +1400,50 @@ export default function Navbar({
                         justifyContent: 'space-between',
                       }}
                     >
-                      <b style={{ fontSize: '13px', color: '#0b2545' }}>Notifications</b>
+                      <b style={{ fontSize: '13px', color: '#0b2545' }}>Notifications &amp; Alerts</b>
                       <span style={{ fontSize: '11px', color: '#64748b' }}>
                         {notifications.length} updates
                       </span>
                     </div>
-                    <div style={{ maxHeight: '300px', overflowY: 'auto', padding: '8px' }}>
+                    <div style={{ maxHeight: '340px', overflowY: 'auto', padding: '8px' }}>
                       {notifications.length === 0 ? (
                         <p style={{ textAlign: 'center', color: '#94a3b8', fontSize: '12px', padding: '16px 0' }}>
-                          🔔 No new updates
+                          🔔 No new notifications
                         </p>
                       ) : (
-                        notifications.map((n) => (
-                          <div
-                            key={n.id}
-                            style={{
-                              padding: '10px 12px',
-                              borderRadius: '10px',
-                              background: n.is_read ? 'transparent' : '#f8fafc',
-                              borderBottom: '1px solid #f1f5f9',
-                            }}
-                          >
-                            <b style={{ fontSize: '12px', color: '#0b2545', display: 'block' }}>
-                              {n.title}
-                            </b>
-                            <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#475569' }}>
-                              {n.message}
-                            </p>
-                          </div>
-                        ))
+                        notifications.map((n) => {
+                          const isWarning = n.type?.includes('SUSPEND') || n.type?.includes('STRIKE');
+                          const isBlocked = n.type?.includes('BLOCK');
+                          const isSuccess = n.type?.includes('VERIF') || n.type?.includes('RESTORE');
+
+                          return (
+                            <div
+                              key={n.id}
+                              style={{
+                                padding: '10px 12px',
+                                borderRadius: '10px',
+                                background: isBlocked ? '#fff1f2' : isWarning ? '#fffbeb' : n.is_read ? 'transparent' : '#f8fafc',
+                                borderBottom: '1px solid #f1f5f9',
+                                borderLeft: isBlocked ? '3px solid #e11d48' : isWarning ? '3px solid #d97706' : isSuccess ? '3px solid #16a34a' : 'none',
+                                marginBottom: '4px',
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                                <b style={{ fontSize: '12px', color: isBlocked ? '#be123c' : isWarning ? '#b45309' : '#0b2545' }}>
+                                  {n.title}
+                                </b>
+                                {n.created_at && (
+                                  <span style={{ fontSize: '10px', color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                                    {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                )}
+                              </div>
+                              <p style={{ margin: '3px 0 0', fontSize: '11px', color: isBlocked ? '#9f1239' : isWarning ? '#92400e' : '#475569', lineHeight: 1.4 }}>
+                                {n.message}
+                              </p>
+                            </div>
+                          );
+                        })
                       )}
                     </div>
                   </div>
@@ -1329,6 +1483,32 @@ export default function Navbar({
                       </small>
                     </div>
 
+                    {user.role === 'ADMIN' && (
+                      <>
+                        <button
+                          type="button"
+                          className="nav-mega-btn"
+                          style={{ padding: '8px 12px', borderRadius: '8px', color: '#0b2545', fontWeight: 'bold' }}
+                          onClick={() => {
+                            setProfileOpen(false);
+                            navigate('/admin');
+                          }}
+                        >
+                          👑 Admin Dashboard
+                        </button>
+                        <button
+                          type="button"
+                          className="nav-mega-btn"
+                          style={{ padding: '8px 12px', borderRadius: '8px', color: '#1f4d3f', fontWeight: 'bold' }}
+                          onClick={() => {
+                            setProfileOpen(false);
+                            navigate('/admin/properties');
+                          }}
+                        >
+                          🏢 Manage Properties &amp; Bookings
+                        </button>
+                      </>
+                    )}
                     <button
                       type="button"
                       className="nav-mega-btn"
@@ -1522,6 +1702,35 @@ export default function Navbar({
           </div>
         )}
       </header>
+
+      {/* ACCOUNT RESTRICTION ALERT BANNER (STRIKE 1 / STRIKE 2) - ONLY SHOWN TO RESTRICTED TENANTS / OWNERS */}
+      {user?.role !== 'ADMIN' && user?.account_status === 'BLOCKED' && (
+        <div className="w-full bg-rose-600 text-white px-4 py-2.5 text-xs font-bold flex flex-wrap items-center justify-between gap-2 shadow-md sticky top-[60px] z-40 animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <span className="text-base">⛔</span>
+            <span>
+              <strong>Account Permanently Blocked (Strike 2):</strong> {user.block_reason || 'Repeated platform rule violations'}. All features, listings, view details, and payments are permanently locked.
+            </span>
+          </div>
+          <span className="px-2.5 py-0.5 rounded bg-white/20 text-[10px] uppercase font-black tracking-wider">
+            Permanently Banned
+          </span>
+        </div>
+      )}
+
+      {user?.role !== 'ADMIN' && user?.account_status === 'SUSPENDED' && (
+        <div className="w-full bg-amber-500 text-white px-4 py-2.5 text-xs font-bold flex flex-wrap items-center justify-between gap-2 shadow-md sticky top-[60px] z-40 animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <span className="text-base">⚠️</span>
+            <span>
+              <strong>Account Suspended by Admin (Strike 1):</strong> {user.block_reason || 'PointKey rules breach'}. View contact, booking visits, and payments are disabled. Open NestAI chatbot to submit rules pledge.
+            </span>
+          </div>
+          <span className="px-2.5 py-0.5 rounded bg-white/20 text-[10px] uppercase font-black tracking-wider">
+            Strike 1 Active
+          </span>
+        </div>
+      )}
 
       {/* POST PROPERTY MODAL */}
       <PostPropertyModal

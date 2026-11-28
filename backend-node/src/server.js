@@ -11,7 +11,7 @@ const visitRoutes = require('./routes/visitRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const { registerChatHandler } = require('./sockets/chatHandler');
-const { uploadDir } = require('./middlewares/uploadMiddleware');
+const { uploadMiddleware, uploadDir } = require('./middlewares/uploadMiddleware');
 
 const app = express();
 const server = http.createServer(app);
@@ -22,12 +22,29 @@ registerChatHandler(io);
 app.set('io', io);
 
 app.use(cors({ origin: process.env.CLIENT_ORIGIN || '*' }));
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use('/uploads', express.static(uploadDir));
 
 app.get('/api/v1/health', (_req, res) => res.json({ status: 'ok', service: 'prent-backend', time: new Date().toISOString() }));
 
+// Universal media & verification document upload
+app.post('/api/v1/upload', uploadMiddleware.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+  const url = `/uploads/${req.file.filename}`;
+  res.status(201).json({
+    url,
+    filename: req.file.filename,
+    originalName: req.file.originalname,
+    size: req.file.size,
+  });
+});
+
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/notifications', (req, res, next) => {
+  req.url = '/notifications' + req.url;
+  authRoutes(req, res, next);
+});
 app.use('/api/v1/properties', propertyRoutes);
 app.use('/api/v1/visits', visitRoutes);
 app.use('/api/v1/payments', paymentRoutes);

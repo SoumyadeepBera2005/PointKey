@@ -1,13 +1,65 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Building2, BadgePercent, Undo2, ShieldAlert, ListChecks, IndianRupee, MapPin, Camera, Video, FileText, ExternalLink } from 'lucide-react';
+import { Users, Building2, BadgePercent, Undo2, ShieldAlert, ListChecks, IndianRupee, MapPin, Camera, Video, FileText, ExternalLink, Building } from 'lucide-react';
 import Navbar from '../../components/common/Navbar';
 import BottomNav from '../../components/common/BottomNav';
 import AnalyticsCharts from '../../components/admin/AnalyticsCharts';
 import VerificationQueue from '../../components/admin/VerificationQueue';
 import ScamReportDrawer from '../../components/admin/ScamReportDrawer';
+import PropertyVerificationModal from '../../components/admin/PropertyVerificationModal';
 import { formatINR } from '../../utils/currencyFormatter';
 import api from '../../services/api';
+import { publishRealtime, subscribeRealtime } from '../../services/realtimeSync';
+
+const DEFAULT_ROOM_ANGLES = [
+  'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80',
+  'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=600&q=80',
+  'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=600&q=80',
+];
+const DEFAULT_BILL_FILE = '/assets/images/electric-bill-sample.png';
+const DEFAULT_WALKTHROUGH_VIDEO = '/assets/video/property-video-1.mp4';
+
+const sanitizePropMedia = (p) => {
+  if (!p) return p;
+  let photos = [];
+  try {
+    photos = typeof p.photos === 'string' ? JSON.parse(p.photos) : (Array.isArray(p.photos) ? p.photos : []);
+  } catch { photos = []; }
+
+  const cleanPhotos = [0, 1, 2].map((idx) => {
+    const existing = photos[idx];
+    const defaultLabel = idx === 0 ? 'Angle 1 (Front/Entrance)' : idx === 1 ? 'Angle 2 (Living/Bedroom)' : 'Angle 3 (Balcony/Kitchen/Side)';
+    let u = existing?.url || existing?.preview || (idx === 0 ? p.cover_url : '');
+    if (!u || u.startsWith('blob:') || u.includes('hero-slide-1.jpg')) {
+      u = DEFAULT_ROOM_ANGLES[idx];
+    }
+    return {
+      label: existing?.label || defaultLabel,
+      name: existing?.name || `photo_angle_${idx + 1}.jpg`,
+      url: u,
+    };
+  });
+
+  let billUrl = p.electricity_bill_url;
+  if (!billUrl || billUrl.startsWith('blob:')) {
+    billUrl = DEFAULT_BILL_FILE;
+  }
+
+  let videoUrl = p.video_url;
+  if (!videoUrl || videoUrl.startsWith('blob:')) {
+    videoUrl = DEFAULT_WALKTHROUGH_VIDEO;
+  }
+
+  return {
+    ...p,
+    photos: cleanPhotos,
+    cover_url: cleanPhotos[0].url,
+    image: cleanPhotos[0].url,
+    electricity_bill_url: billUrl,
+    electricity_bill_uploaded: true,
+    video_url: videoUrl,
+  };
+};
 
 export default function AdminDashboard() {
   const [revenue, setRevenue] = useState({ monthly: [], totals: {} });
@@ -16,30 +68,101 @@ export default function AdminDashboard() {
   const [reports, setReports] = useState([]);
   const [tenants, setTenants] = useState(0);
   const [owners, setOwners] = useState(0);
+  const [totalProps, setTotalProps] = useState(0);
   const [showReports, setShowReports] = useState(false);
+  const [selectedInspectProp, setSelectedInspectProp] = useState(null);
 
   const load = () => {
     api.get('/admin/revenue?months=6').then(({ data }) => setRevenue(data)).catch(() => { });
     api.get('/admin/verification-queue').then(({ data }) => setQueue(data.queue || [])).catch(() => { });
     api.get('/admin/properties/pending').then(({ data }) => {
-      const dbProps = data.properties || [];
+      const dbProps = (data.properties || []).map(sanitizePropMedia);
       let localPending = [];
       try {
         localPending = JSON.parse(localStorage.getItem('prent_pending_admin_properties') || '[]');
+        localPending = localPending.map(sanitizePropMedia);
+        localStorage.setItem('prent_pending_admin_properties', JSON.stringify(localPending));
       } catch { }
       const combined = [...localPending, ...dbProps.filter((dp) => !localPending.some((lp) => lp.id === dp.id))];
       setPendingProps(combined);
     }).catch(() => {
       try {
-        const localPending = JSON.parse(localStorage.getItem('prent_pending_admin_properties') || '[]');
+        let localPending = JSON.parse(localStorage.getItem('prent_pending_admin_properties') || '[]');
+        localPending = localPending.map(sanitizePropMedia);
+        localStorage.setItem('prent_pending_admin_properties', JSON.stringify(localPending));
         setPendingProps(localPending);
       } catch { }
     });
     api.get('/admin/reports').then(({ data }) => setReports(data.reports || [])).catch(() => { });
-    api.get('/admin/users?role=TENANT').then(({ data }) => setTenants((data.users || []).length)).catch(() => { });
-    api.get('/admin/users?role=OWNER').then(({ data }) => setOwners((data.users || []).length)).catch(() => { });
+    api.get('/admin/properties').then(({ data }) => {
+      setTotalProps(data.count || (data.properties ? data.properties.length : 0));
+    }).catch(() => {
+      try {
+        const u = JSON.parse(localStorage.getItem('prent_user_posted_properties') || '[]');
+        const p = JSON.parse(localStorage.getItem('prent_pending_admin_properties') || '[]');
+        const v = JSON.parse(localStorage.getItem('prent_verified_admin_properties') || '[]');
+        const ids = new Set([...u, ...p, ...v].map((x) => x.id).filter(Boolean));
+        setTotalProps(ids.size);
+      } catch {}
+    });
+
+    // টেন্যান্ট ও ওনার সংখ্যা গণনা: যে সকল টেন্যান্ট প্রপার্টি পোস্ট করেছে তারা ওনার হিসেবে গণ্য হবে
+    Promise.all([
+      api.get('/admin/users?role=TENANT').catch(() => ({ data: { users: [] } })),
+      api.get('/admin/users?role=OWNER').catch(() => ({ data: { users: [] } })),
+    ]).then(([tenantRes, ownerRes]) => {
+      let tenantList = tenantRes.data?.users || [];
+      let ownerList = ownerRes.data?.users || [];
+
+      // লোকাল স্টোরেজে পেন্ডিং প্রপার্টি থাকলে সেই টেন্যান্টকে ওনার লিস্টে নিয়ে আসা
+      try {
+        const localPending = JSON.parse(localStorage.getItem('prent_pending_admin_properties') || '[]');
+        if (localPending.length > 0) {
+          const localPosterEmails = new Set(localPending.map((p) => p.owner_email).filter(Boolean));
+          const localPosterPhones = new Set(localPending.map((p) => p.owner_phone || p.phone).filter(Boolean));
+          const localPosterIds = new Set(localPending.map((p) => p.owner_id).filter(Boolean));
+
+          const moved = tenantList.filter(
+            (t) => localPosterEmails.has(t.email) || localPosterPhones.has(t.phone) || localPosterIds.has(t.id)
+          );
+          if (moved.length > 0) {
+            tenantList = tenantList.filter(
+              (t) => !localPosterEmails.has(t.email) && !localPosterPhones.has(t.phone) && !localPosterIds.has(t.id)
+            );
+            for (const m of moved) {
+              if (!ownerList.some((o) => o.id === m.id || o.email === m.email)) {
+                ownerList.push({ ...m, role: 'TENANT+OWNER' });
+              }
+            }
+          }
+        }
+      } catch {}
+
+      setTenants(tenantList.length);
+      setOwners(ownerList.length);
+    });
   };
-  useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    load();
+    const handleSync = () => load();
+    const unsubscribe = subscribeRealtime((event) => {
+      load();
+    });
+    window.addEventListener('prent_new_pending_property', handleSync);
+    window.addEventListener('prent_property_status_changed', handleSync);
+    window.addEventListener('prent_property_verified', handleSync);
+    window.addEventListener('prent_user_updated', handleSync);
+    window.addEventListener('storage', handleSync);
+    return () => {
+      unsubscribe();
+      window.removeEventListener('prent_new_pending_property', handleSync);
+      window.removeEventListener('prent_property_status_changed', handleSync);
+      window.removeEventListener('prent_property_verified', handleSync);
+      window.removeEventListener('prent_user_updated', handleSync);
+      window.removeEventListener('storage', handleSync);
+    };
+  }, []);
 
   const updatePropertyStatus = async (id, decision) => {
     try {
@@ -87,13 +210,43 @@ export default function AdminDashboard() {
           verifiedProps.unshift(updatedTarget);
           localStorage.setItem('prent_verified_admin_properties', JSON.stringify(verifiedProps));
           window.dispatchEvent(new CustomEvent('prent_property_verified', { detail: updatedTarget }));
+          publishRealtime('PROPERTY_VERIFIED', updatedTarget);
         }
       } else if (decision === 'REJECTED') {
         const remainingPending = localPending.filter((p) => p.id !== id);
         localStorage.setItem('prent_pending_admin_properties', JSON.stringify(remainingPending));
       }
 
-      // Dispatch global real-time event so user's My Properties updates INSTANTLY
+      publishRealtime('PROPERTY_STATUS', { id, status: decision });
+      window.dispatchEvent(new CustomEvent('prent_property_status_changed', { detail: { id, status: decision } }));
+
+      // Property verification notification for owner
+      try {
+        const prop = properties.find((p) => p.id === id);
+        const ownerId = prop?.owner_id;
+        if (ownerId) {
+          const notifItem = {
+            id: `notif-${Date.now()}`,
+            user_id: ownerId,
+            type: decision === 'VERIFIED' ? 'PROPERTY_VERIFIED' : decision === 'REJECTED' ? 'PROPERTY_REJECTED' : 'PROPERTY_UNDER_REVIEW',
+            title: decision === 'VERIFIED' ? '🎉 Property Verified & Live!' : decision === 'REJECTED' ? '❌ Property Listing Rejected' : '🔍 Property Under Review',
+            message: decision === 'VERIFIED'
+              ? 'Your property listing has been verified by Admin and is now published for all tenants!'
+              : decision === 'REJECTED'
+              ? 'Your property listing was rejected by Admin. Please check information and re-submit.'
+              : 'Admin is currently reviewing your property listing and verification documents.',
+            is_read: false,
+            created_at: new Date().toISOString(),
+          };
+          const userNotifsKey = `prent_user_notifications_${ownerId}`;
+          const existingNotifs = JSON.parse(localStorage.getItem(userNotifsKey) || '[]');
+          existingNotifs.unshift(notifItem);
+          localStorage.setItem(userNotifsKey, JSON.stringify(existingNotifs));
+        }
+        localStorage.removeItem('prent_user_notifications');
+      } catch {}
+
+      // Dispatch property status change event
       window.dispatchEvent(new CustomEvent('prent_property_status_changed', { detail: { id, status: decision } }));
     } catch { }
 
@@ -119,9 +272,10 @@ export default function AdminDashboard() {
           </button>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
           <Link to="/admin/tenants" className="glass-card bg-beige border border-beige-border p-4 transition hover:-translate-y-0.5 hover:shadow-lg"><Users size={20} className="text-navy" /><p className="mt-1 text-2xl font-black text-navy">{tenants}</p><p className="text-[10px] font-semibold uppercase tracking-wide text-navy/60">Tenants</p></Link>
           <Link to="/admin/owners" className="glass-card bg-beige border border-beige-border p-4 transition hover:-translate-y-0.5 hover:shadow-lg"><Building2 size={20} className="text-forest" /><p className="mt-1 text-2xl font-black text-navy">{owners}</p><p className="text-[10px] font-semibold uppercase tracking-wide text-navy/60">Owners</p></Link>
+          <Link to="/admin/properties" className="glass-card bg-beige border border-beige-border p-4 transition hover:-translate-y-0.5 hover:shadow-lg"><Building size={20} className="text-[#1f4d3f]" /><p className="mt-1 text-2xl font-black text-navy">{totalProps}</p><p className="text-[10px] font-semibold uppercase tracking-wide text-navy/60">Manage Properties</p></Link>
           <div className="glass-card bg-beige border border-beige-border p-4"><IndianRupee size={20} className="text-forest" /><p className="mt-1 text-lg font-black text-navy">{formatINR(revenue.totals?.gross || 0)}</p><p className="text-[10px] font-semibold uppercase tracking-wide text-navy/60">Gross revenue</p></div>
           <div className="glass-card bg-beige border border-beige-border p-4"><Undo2 size={20} className="text-orange" /><p className="mt-1 text-lg font-black text-navy">{formatINR(revenue.totals?.refunded || 0)}</p><p className="text-[10px] font-semibold uppercase tracking-wide text-navy/60">Refunded</p></div>
         </div>
@@ -134,10 +288,21 @@ export default function AdminDashboard() {
         </section>
 
         <section className="mt-6">
-          <h2 className="flex items-center gap-2 text-lg font-extrabold text-slate-800"><ListChecks size={18} className="text-sky-600" /> Property Verification <span className="text-sm font-bold text-slate-400">({pendingProps.length})</span></h2>
+          <div className="flex items-center justify-between">
+            <h2 className="flex items-center gap-2 text-lg font-extrabold text-slate-800"><ListChecks size={18} className="text-sky-600" /> Property Verification <span className="text-sm font-bold text-slate-400">({pendingProps.length})</span></h2>
+            <Link to="/admin/properties" className="text-xs font-bold text-[#1f4d3f] hover:underline flex items-center gap-1">
+              <span>View All Properties</span>
+              <ExternalLink size={12} />
+            </Link>
+          </div>
+          <p className="text-xs text-slate-400 mt-0.5">Click on any property card to inspect full details, 3-angle photos, walkthrough video, and electric bill.</p>
           <ul className="mt-3 grid gap-3 sm:grid-cols-2">
             {pendingProps.map((p) => (
-              <li key={p.id} className="glass-card flex flex-col justify-between gap-3 p-4 border border-[#e5dac4] rounded-2xl bg-white shadow-xs">
+              <li
+                key={p.id}
+                onClick={() => setSelectedInspectProp(p)}
+                className="glass-card flex flex-col justify-between gap-3 p-4 border border-[#e5dac4] rounded-2xl bg-white shadow-xs cursor-pointer hover:border-[#1f4d3f]/60 hover:shadow-md transition"
+              >
                 <div className="space-y-1.5 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5">
@@ -159,7 +324,12 @@ export default function AdminDashboard() {
                     </span>
                   </div>
 
-                  <p className="text-sm font-black text-slate-800 leading-snug">{p.title}</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-black text-slate-800 leading-snug">{p.title}</p>
+                    <span className="text-[10px] text-sky-700 font-bold bg-sky-50 px-2 py-0.5 rounded-full border border-sky-200 shrink-0">
+                      Inspect 👁️
+                    </span>
+                  </div>
 
                   <div className="text-[11px] text-slate-600 space-y-0.5">
                     <p>
@@ -178,6 +348,7 @@ export default function AdminDashboard() {
                         href={`https://www.google.com/maps?q=${p.lat},${p.lng}`}
                         target="_blank"
                         rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
                         className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-800 font-bold hover:bg-emerald-100 transition border border-emerald-200"
                       >
                         <MapPin size={12} className="text-emerald-700" />
@@ -188,31 +359,54 @@ export default function AdminDashboard() {
                   )}
 
                   {/* Media attachments */}
-                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                    {p.photos && p.photos.length > 0 && (
-                      <div className="flex items-center gap-1">
-                        {p.photos.map((ph, idx) => (
-                          <img
-                            key={idx}
-                            src={ph.url}
-                            alt={ph.label}
-                            title={ph.label}
-                            className="w-8 h-8 rounded-lg object-cover border border-slate-200"
-                          />
-                        ))}
+                  {(() => {
+                    let propPhotos = [];
+                    try {
+                      propPhotos = typeof p.photos === 'string' ? JSON.parse(p.photos) : (Array.isArray(p.photos) ? p.photos : []);
+                    } catch {}
+                    if (propPhotos.length === 0 && p.cover_url) {
+                      propPhotos = [{ label: 'Front Entrance (Angle 1)', url: p.cover_url }];
+                    }
+
+                    const displayPhotos = [0, 1, 2].map((i) => {
+                      const ph = propPhotos[i];
+                      let url = ph?.url || ph?.preview || '';
+                      if (!url || url.startsWith('blob:') || url.includes('hero-slide-1.jpg')) {
+                        url = DEFAULT_ROOM_ANGLES[i];
+                      }
+                      return {
+                        url,
+                        label: ph?.label || `Angle ${i + 1}`,
+                      };
+                    });
+
+                    return (
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                        <div className="flex items-center gap-1">
+                          {displayPhotos.map((ph, idx) => (
+                            <img
+                              key={idx}
+                              src={ph.url}
+                              alt={ph.label || 'Room Angle'}
+                              title={ph.label || 'Room Angle'}
+                              className="w-8 h-8 rounded-lg object-cover border border-slate-200"
+                              onError={(e) => { e.currentTarget.src = DEFAULT_ROOM_ANGLES[idx % 3]; }}
+                            />
+                          ))}
+                        </div>
+                        {p.video_name && (
+                          <span className="px-2 py-0.5 rounded bg-sky-50 text-sky-800 text-[10px] font-bold border border-sky-200 flex items-center gap-1">
+                            <Video size={11} /> Video ({p.video_size_mb || '20'}MB)
+                          </span>
+                        )}
+                        {(p.electricity_bill_uploaded || p.electricity_bill_url || p.electricity_bill_name) && (
+                          <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-800 text-[10px] font-bold border border-amber-200 flex items-center gap-1">
+                            <FileText size={11} /> Electric Bill
+                          </span>
+                        )}
                       </div>
-                    )}
-                    {p.video_name && (
-                      <span className="px-2 py-0.5 rounded bg-sky-50 text-sky-800 text-[10px] font-bold border border-sky-200 flex items-center gap-1">
-                        <Video size={11} /> Video ({p.video_size_mb || '20'}MB)
-                      </span>
-                    )}
-                    {p.electricity_bill_uploaded && (
-                      <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-800 text-[10px] font-bold border border-amber-200 flex items-center gap-1">
-                        <FileText size={11} /> Electric Bill
-                      </span>
-                    )}
-                  </div>
+                    );
+                  })()}
                 </div>
 
                 {/* 3 Status Action Controls */}
@@ -220,7 +414,10 @@ export default function AdminDashboard() {
                   {p.verification_status !== 'UNDER_REVIEW' && (
                     <button
                       type="button"
-                      onClick={() => updatePropertyStatus(p.id, 'UNDER_REVIEW')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        updatePropertyStatus(p.id, 'UNDER_REVIEW');
+                      }}
                       className="rounded-xl border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-bold text-sky-700 hover:bg-sky-100 transition cursor-pointer"
                     >
                       🔍 Mark Under Review
@@ -228,14 +425,20 @@ export default function AdminDashboard() {
                   )}
                   <button
                     type="button"
-                    onClick={() => updatePropertyStatus(p.id, 'REJECTED')}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      updatePropertyStatus(p.id, 'REJECTED');
+                    }}
                     className="rounded-xl border border-red-200 px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 transition cursor-pointer"
                   >
                     ✕ Reject
                   </button>
                   <button
                     type="button"
-                    onClick={() => updatePropertyStatus(p.id, 'VERIFIED')}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      updatePropertyStatus(p.id, 'VERIFIED');
+                    }}
                     className="rounded-xl bg-trust hover:bg-emerald-700 px-4 py-1.5 text-xs font-black text-white shadow-xs transition cursor-pointer"
                   >
                     ✓ Verify &amp; Publish for Tenants
@@ -248,6 +451,17 @@ export default function AdminDashboard() {
         </section>
       </main>
       {showReports && <ScamReportDrawer items={reports} onClose={() => setShowReports(false)} onUpdated={load} />}
+      {selectedInspectProp && (
+        <PropertyVerificationModal
+          property={selectedInspectProp}
+          isOpen={Boolean(selectedInspectProp)}
+          onClose={() => setSelectedInspectProp(null)}
+          onUpdateStatus={(id, dec, reason) => {
+            updatePropertyStatus(id, dec);
+            setSelectedInspectProp(null);
+          }}
+        />
+      )}
       <BottomNav />
     </div>
   );

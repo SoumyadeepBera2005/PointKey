@@ -13,14 +13,14 @@ const storage = multer.diskStorage({
   },
 });
 
-const ALLOWED = /jpeg|jpg|png|webp|mp4|mov/;
+const ALLOWED = /jpeg|jpg|png|webp|mp4|mov|webm|pdf/;
 
 const uploadMiddleware = multer({
   storage,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB for short room videos
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB for short room videos and verification docs
   fileFilter: (_req, file, cb) => {
     const ok = ALLOWED.test(path.extname(file.originalname).toLowerCase());
-    if (!ok) return cb(new Error('Only images (jpg/png/webp) and videos (mp4/mov) are allowed'));
+    if (!ok) return cb(new Error('Only images (jpg/png/webp), videos (mp4/mov/webm), and PDF documents are allowed'));
     cb(null, true);
   },
 });

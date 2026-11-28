@@ -13,6 +13,7 @@ import api from '../../services/api';
 import { formatINR } from '../../utils/currencyFormatter';
 import { SAMPLE_PROPERTIES } from '../../data/sampleProperties';
 import { useAuth } from '../../context/AuthContext';
+import { subscribeRealtime } from '../../services/realtimeSync';
 
 export default function PropertyDetails() {
   const { id } = useParams();
@@ -40,10 +41,89 @@ export default function PropertyDetails() {
 
     api.get(`/properties/${id}`)
       .then(({ data }) => {
-        setProperty(data.property);
+        let prop = data.property;
+        if (prop) {
+          // Extract owner uploaded photos so tenant sees real images
+          let photos = [];
+          try {
+            photos = typeof prop.photos === 'string' ? JSON.parse(prop.photos) : (Array.isArray(prop.photos) ? prop.photos : []);
+          } catch {}
+
+          try {
+            const localProps = [
+              ...JSON.parse(localStorage.getItem('prent_verified_admin_properties') || '[]'),
+              ...JSON.parse(localStorage.getItem('prent_user_posted_properties') || '[]'),
+              ...JSON.parse(localStorage.getItem('prent_pending_admin_properties') || '[]'),
+            ];
+            const matchedLocal = localProps.find(
+              (lp) => String(lp.id) === String(id) || String(lp.property_code) === String(id)
+            );
+            if (matchedLocal) {
+              let matchedPhotos = [];
+              try {
+                matchedPhotos = typeof matchedLocal.photos === 'string' ? JSON.parse(matchedLocal.photos) : (Array.isArray(matchedLocal.photos) ? matchedLocal.photos : []);
+              } catch {}
+              if (matchedPhotos.length > 0 && photos.length === 0) {
+                photos = matchedPhotos;
+              }
+              if (!prop.video_url && matchedLocal.video_url) {
+                prop.video_url = matchedLocal.video_url;
+              }
+            }
+          } catch {}
+
+          if (photos.length > 0) {
+            prop.media = photos.map((ph, idx) => ({
+              id: `angle-${idx + 1}`,
+              room_tag: ph.label || `Angle ${idx + 1}`,
+              media_type: 'IMAGE',
+              media_url: ph.url || ph.preview || (typeof ph === 'string' ? ph : ''),
+              category: 'ROOM',
+              captured_date: prop.created_at || new Date().toISOString(),
+            })).filter((m) => Boolean(m.media_url));
+          }
+        }
+        setProperty(prop);
         setUnlocked(Boolean(data.unlocked || isLocallyUnlocked));
       })
       .catch(() => {
+        // 1. Check local storage first for user-posted or admin-verified property!
+        try {
+          const localProps = [
+            ...JSON.parse(localStorage.getItem('prent_verified_admin_properties') || '[]'),
+            ...JSON.parse(localStorage.getItem('prent_user_posted_properties') || '[]'),
+            ...JSON.parse(localStorage.getItem('prent_pending_admin_properties') || '[]'),
+          ];
+          const matched = localProps.find(
+            (lp) => String(lp.id) === String(id) || String(lp.property_code) === String(id)
+          );
+          if (matched) {
+            let photos = [];
+            try {
+              photos = typeof matched.photos === 'string' ? JSON.parse(matched.photos) : (Array.isArray(matched.photos) ? matched.photos : []);
+            } catch {}
+            const mediaList = photos.map((ph, idx) => ({
+              id: `angle-${idx + 1}`,
+              room_tag: ph.label || `Angle ${idx + 1}`,
+              media_type: 'IMAGE',
+              media_url: ph.url || ph.preview || (typeof ph === 'string' ? ph : ''),
+              category: 'ROOM',
+              captured_date: matched.created_at || new Date().toISOString(),
+            })).filter((m) => Boolean(m.media_url));
+
+            setProperty({
+              ...matched,
+              rent_amount: matched.rent_amount || matched.price,
+              advance_amount: matched.advance_amount || matched.deposit,
+              locality: matched.locality || 'Area',
+              city: matched.city || 'Kolkata',
+              media: mediaList.length > 0 ? mediaList : (matched.cover_url ? [{ id: 'cov-1', room_tag: 'Main View', media_url: matched.cover_url, media_type: 'IMAGE' }] : []),
+            });
+            setUnlocked(isLocallyUnlocked);
+            return;
+          }
+        } catch {}
+
         // Fallback for sample properties so clicking cards from demo works
         const sample = SAMPLE_PROPERTIES.find((s) => String(s.id) === String(id));
         if (sample) {
@@ -141,6 +221,21 @@ export default function PropertyDetails() {
       .finally(() => setLoading(false));
   }, [id]);
 
+  // Real-time synchronization: live status & details update without page refresh
+  useEffect(() => {
+    const unsubscribe = subscribeRealtime((event) => {
+      if (
+        (event?.type === 'PROPERTY_STATUS' || event?.type === 'PROPERTY_SYNC') &&
+        String(event.payload?.id) === String(id)
+      ) {
+        if (event.payload.status) {
+          setProperty((prev) => (prev ? { ...prev, verification_status: event.payload.status } : prev));
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, [id]);
+
   const submitRating = async (score) => {
     setRating(score);
     try {
@@ -225,7 +320,7 @@ export default function PropertyDetails() {
       <main className="mx-auto max-w-6xl gap-6 px-4 py-5 lg:grid lg:grid-cols-5">
         {/* Left column — gallery + details */}
         <div className="space-y-5 lg:col-span-3">
-          <TimestampGallery media={p.media} />
+          <TimestampGallery media={p.media} videoUrl={p.video_url} propertyTitle={p.title} />
 
           <div className="glass-card p-5">
             <div className="flex flex-wrap items-center gap-2">

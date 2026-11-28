@@ -36,10 +36,23 @@ async function applyPropertyPrivacy(req, res, next) {
   }
 }
 
-/** Strip private fields from a property row based on req.isPropertyUnlocked */
-function maskProperty(property, isUnlocked) {
-  if (isUnlocked || !property) return property;
+/** Strip private fields from a property row based on req.isPropertyUnlocked and user role */
+function maskProperty(property, isUnlocked, user = null) {
+  if (!property) return property;
   const masked = { ...property };
+
+  const isAdmin = user && user.role === 'ADMIN';
+  const isOwner = user && (user.id === property.owner_id || user.id === property.ownerId);
+
+  // Electricity bill and raw verification video are ALWAYS hidden from public tenants
+  if (!isAdmin && !isOwner) {
+    masked.electricity_bill_url = null;
+    masked.electricity_bill_name = null;
+    masked.electricity_bill_uploaded = false;
+    masked.video_url = null; // hide raw owner video from public tenants
+  }
+
+  if (isUnlocked) return masked;
   masked.exact_address = null;
   masked.location = null; // never leak lat/lng pre-payment
   masked.owner_phone = null;

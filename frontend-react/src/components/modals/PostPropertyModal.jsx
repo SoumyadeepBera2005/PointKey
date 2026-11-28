@@ -20,8 +20,12 @@ import {
   Navigation,
   Zap
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import api from '../../services/api';
+import { publishRealtime } from '../../services/realtimeSync';
 
 export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
+  const { user, refreshUser } = useAuth();
   // Current active step: 1 | 2 | 3 | 4
   const [currentStep, setCurrentStep] = useState(1);
   const formContainerRef = useRef(null);
@@ -88,6 +92,7 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
   const [electricityBill, setElectricityBill] = useState(null);
   const [billFileName, setBillFileName] = useState('');
   const [billFileSize, setBillFileSize] = useState('');
+  const [billPreview, setBillPreview] = useState('');
   const billInputRef = useRef(null);
 
   // ==========================================
@@ -112,12 +117,23 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
     else if (category === 'room') setSubtype('Single Private Room');
   }, [category]);
 
-  // Try auto-fetching live location on first open
+  // Try auto-fetching live location on first open & prefill user details
   useEffect(() => {
     if (isOpen && !liveLocation && !isFetchingLocation) {
       fetchLiveLocation();
     }
-  }, [isOpen]);
+    if (isOpen && user) {
+      if (!fullName && (user.full_name || user.name)) {
+        setFullName(user.full_name || user.name);
+      }
+      if (!phone && user.phone) {
+        setPhone(user.phone);
+      }
+      if (!email && user.email) {
+        setEmail(user.email);
+      }
+    }
+  }, [isOpen, user]);
 
   if (!isOpen) return null;
 
@@ -190,41 +206,78 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
     );
   };
 
+  // Helper to read a File into persistent Base64 Data URL
+  const readFileAsDataUrl = (file) => {
+    return new Promise((resolve) => {
+      if (!file) return resolve('');
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target?.result || '');
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Helper to upload single file via FormData to backend
+  const uploadSingleFile = async (file) => {
+    if (!file) return null;
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const res = await api.post('/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      return res.data?.url || null;
+    } catch {
+      return null;
+    }
+  };
+
   // ==========================================
   // FILE HANDLERS
   // ==========================================
-  const handleBillUpload = (e) => {
+  const handleBillUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      setStepErrors((prev) => ({ ...prev, electricityBill: 'Current bill exceeds 5MB limit. Please upload under 5MB.' }));
+    if (file.size > 10 * 1024 * 1024) {
+      setStepErrors((prev) => ({ ...prev, electricityBill: 'Current bill exceeds 10MB limit. Please upload under 10MB.' }));
       return;
     }
     const sizeKb = Math.round(file.size / 1024);
     setElectricityBill(file);
     setBillFileName(file.name);
     setBillFileSize(sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`);
+    
+    // Read as persistent Base64
+    const dataUrl = await readFileAsDataUrl(file);
+    setBillPreview(dataUrl);
     setStepErrors((prev) => ({ ...prev, electricityBill: '' }));
   };
 
-  const handlePhotoUpload = (e, angleKey) => {
+  const handlePhotoUpload = async (e, angleKey) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
       setStepErrors((prev) => ({ ...prev, [angleKey]: 'Please upload an image file (JPG, PNG, WebP).' }));
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      setStepErrors((prev) => ({ ...prev, [angleKey]: 'Photo file exceeds 10MB limit.' }));
+    if (file.size > 15 * 1024 * 1024) {
+      setStepErrors((prev) => ({ ...prev, [angleKey]: 'Photo file exceeds 15MB limit.' }));
       return;
     }
 
-    const preview = URL.createObjectURL(file);
-    const photoData = { file, preview, name: file.name };
+    const blobUrl = URL.createObjectURL(file);
+    const initialData = { file, preview: blobUrl, url: blobUrl, name: file.name };
 
-    if (angleKey === 'photoAngle1') setPhotoAngle1(photoData);
-    else if (angleKey === 'photoAngle2') setPhotoAngle2(photoData);
-    else if (angleKey === 'photoAngle3') setPhotoAngle3(photoData);
+    if (angleKey === 'photoAngle1') setPhotoAngle1(initialData);
+    else if (angleKey === 'photoAngle2') setPhotoAngle2(initialData);
+    else if (angleKey === 'photoAngle3') setPhotoAngle3(initialData);
+
+    // Read as persistent Base64 Data URL so images never expire on refresh
+    const dataUrl = await readFileAsDataUrl(file);
+    const persistentData = { file, preview: dataUrl || blobUrl, url: dataUrl || blobUrl, name: file.name };
+    if (angleKey === 'photoAngle1') setPhotoAngle1(persistentData);
+    else if (angleKey === 'photoAngle2') setPhotoAngle2(persistentData);
+    else if (angleKey === 'photoAngle3') setPhotoAngle3(persistentData);
 
     setStepErrors((prev) => ({ ...prev, [angleKey]: '' }));
   };
@@ -397,6 +450,36 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
     const allCombinedRules = [...selectedRules];
     if (customRules.trim()) allCombinedRules.push(customRules.trim());
 
+    // 1. Upload files to backend if reachable
+    let uploadedAngle1 = null;
+    let uploadedAngle2 = null;
+    let uploadedAngle3 = null;
+    let uploadedBill = null;
+    let uploadedVideo = null;
+
+    try {
+      const [u1, u2, u3, uBill, uVid] = await Promise.all([
+        photoAngle1?.file ? uploadSingleFile(photoAngle1.file) : null,
+        photoAngle2?.file ? uploadSingleFile(photoAngle2.file) : null,
+        photoAngle3?.file ? uploadSingleFile(photoAngle3.file) : null,
+        electricityBill ? uploadSingleFile(electricityBill) : null,
+        videoFile?.file ? uploadSingleFile(videoFile.file) : null,
+      ]);
+      uploadedAngle1 = u1;
+      uploadedAngle2 = u2;
+      uploadedAngle3 = u3;
+      uploadedBill = uBill;
+      uploadedVideo = uVid;
+    } catch (uploadErr) {
+      console.warn('Backend file upload fallback:', uploadErr);
+    }
+
+    const finalAngle1 = uploadedAngle1 || photoAngle1?.preview || photoAngle1?.url || 'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=1200&q=80';
+    const finalAngle2 = uploadedAngle2 || photoAngle2?.preview || photoAngle2?.url || 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=1200&q=80';
+    const finalAngle3 = uploadedAngle3 || photoAngle3?.preview || photoAngle3?.url || 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=1200&q=80';
+    const finalBill = uploadedBill || billPreview || '/assets/images/electric-bill-sample.png';
+    const finalVideo = uploadedVideo || videoFile?.preview || '/assets/video/property-video-1.mp4';
+
     const pendingProperty = {
       id: `prop-pending-${Date.now()}`,
       property_code: `${category === 'pg' ? 'PG' : category === 'flat' ? 'F' : 'R'}${Math.floor(100 + Math.random() * 900)}`,
@@ -442,18 +525,19 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
       rules: allCombinedRules,
 
       // Media
-      cover_url: photoAngle1?.preview || '/assets/images/hero-slide-1.jpg',
-      image: photoAngle1?.preview || '/assets/images/hero-slide-1.jpg',
+      cover_url: finalAngle1,
+      image: finalAngle1,
       photos: [
-        { label: 'Angle 1 (Front/Entrance)', name: photoAngle1?.name, url: photoAngle1?.preview },
-        { label: 'Angle 2 (Living/Bedroom)', name: photoAngle2?.name, url: photoAngle2?.preview },
-        { label: 'Angle 3 (Balcony/Kitchen/Side)', name: photoAngle3?.name, url: photoAngle3?.preview },
+        { label: 'Angle 1 (Front/Entrance)', name: photoAngle1?.name || 'angle_1.jpg', url: finalAngle1 },
+        { label: 'Angle 2 (Living/Bedroom)', name: photoAngle2?.name || 'angle_2.jpg', url: finalAngle2 },
+        { label: 'Angle 3 (Balcony/Kitchen/Side)', name: photoAngle3?.name || 'angle_3.jpg', url: finalAngle3 },
       ],
-      video_name: videoFile?.name,
-      video_size_mb: videoFile?.sizeMB,
-      video_url: videoFile?.preview,
+      video_name: videoFile?.name || 'Walkthrough_Tour.mp4',
+      video_size_mb: videoFile?.sizeMB || '20',
+      video_url: finalVideo,
       electricity_bill_uploaded: true,
-      electricity_bill_name: billFileName,
+      electricity_bill_name: billFileName || 'Current_Bill.png',
+      electricity_bill_url: finalBill,
 
       // Status
       verification_status: 'PENDING',
@@ -465,26 +549,84 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
       created_at: new Date().toISOString(),
     };
 
+    let createdResult = pendingProperty;
     try {
-      // 1. Add to Admin Pending Queue
+      // 1. Submit directly to backend API
+      const res = await api.post('/properties', pendingProperty);
+      if (res.data?.property) {
+        createdResult = {
+          ...pendingProperty,
+          ...res.data.property,
+          id: res.data.property.id,
+          property_code: res.data.property.property_code,
+          location: typeof res.data.property.location === 'string' && res.data.property.location
+            ? res.data.property.location
+            : pendingProperty.location,
+          photos: Array.isArray(res.data.property.photos)
+            ? res.data.property.photos
+            : pendingProperty.photos,
+        };
+      }
+      if (res.data?.token) {
+        localStorage.setItem('prent_token', res.data.token);
+      }
+      if (res.data?.user) {
+        localStorage.setItem('prent_user', JSON.stringify(res.data.user));
+        window.dispatchEvent(new CustomEvent('prent_user_updated', { detail: res.data.user }));
+        if (refreshUser) refreshUser();
+      } else {
+        // Optimistically upgrade user role in localStorage to TENANT+OWNER or TENANT+BUILDER
+        try {
+          const currentLocal = JSON.parse(localStorage.getItem('prent_user') || 'null');
+          if (currentLocal && currentLocal.role !== 'ADMIN') {
+            const newRole = listerType === 'Builder' ? 'TENANT+BUILDER' : 'TENANT+OWNER';
+            currentLocal.role = newRole;
+            localStorage.setItem('prent_user', JSON.stringify(currentLocal));
+            window.dispatchEvent(new CustomEvent('prent_user_updated', { detail: currentLocal }));
+          }
+        } catch {}
+      }
+    } catch (err) {
+      console.warn('Backend API submission fallback to local queue:', err);
+      // Fallback: optimistically upgrade role
+      try {
+        const currentLocal = JSON.parse(localStorage.getItem('prent_user') || 'null');
+        if (currentLocal && currentLocal.role !== 'ADMIN') {
+          const newRole = listerType === 'Builder' ? 'TENANT+BUILDER' : 'TENANT+OWNER';
+          currentLocal.role = newRole;
+          localStorage.setItem('prent_user', JSON.stringify(currentLocal));
+          window.dispatchEvent(new CustomEvent('prent_user_updated', { detail: currentLocal }));
+        }
+      } catch {}
+    }
+
+    try {
+      // 2. Add to Admin Pending Queue in localStorage
       const existingPending = JSON.parse(localStorage.getItem('prent_pending_admin_properties') || '[]');
-      existingPending.unshift(pendingProperty);
-      localStorage.setItem('prent_pending_admin_properties', JSON.stringify(existingPending));
+      const filteredPending = existingPending.filter((p) => p.id !== createdResult.id);
+      filteredPending.unshift(createdResult);
+      localStorage.setItem('prent_pending_admin_properties', JSON.stringify(filteredPending));
 
-      // 2. Add to user's posted properties
+      // 3. Add to user's posted properties in localStorage
       const userPosted = JSON.parse(localStorage.getItem('prent_user_posted_properties') || '[]');
-      userPosted.unshift(pendingProperty);
-      localStorage.setItem('prent_user_posted_properties', JSON.stringify(userPosted));
+      const filteredUser = userPosted.filter((p) => p.id !== createdResult.id);
+      filteredUser.unshift(createdResult);
+      localStorage.setItem('prent_user_posted_properties', JSON.stringify(filteredUser));
 
-      // 3. Dispatch admin notification event
-      window.dispatchEvent(new CustomEvent('prent_new_pending_property', { detail: pendingProperty }));
+      // 4. Dispatch admin notification and status sync events across all open tabs
+      publishRealtime('NEW_PROPERTY', createdResult);
+      publishRealtime('PROPERTY_STATUS', { id: createdResult.id, status: 'PENDING', property: createdResult });
+      window.dispatchEvent(new CustomEvent('prent_new_pending_property', { detail: createdResult }));
+      window.dispatchEvent(new CustomEvent('prent_property_status_changed', { detail: { id: createdResult.id, status: 'PENDING' } }));
+      window.dispatchEvent(new Event('prent_user_updated'));
+      window.dispatchEvent(new Event('storage'));
     } catch {}
 
     setTimeout(() => {
       setIsSubmitting(false);
       setSubmitted(true);
-      if (onSuccess) onSuccess(pendingProperty);
-    }, 700);
+      if (onSuccess) onSuccess(createdResult);
+    }, 600);
   };
 
   const handleResetAndClose = () => {

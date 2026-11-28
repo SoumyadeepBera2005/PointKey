@@ -3,8 +3,9 @@ import Navbar from '../../components/common/Navbar';
 import BottomNav from '../../components/common/BottomNav';
 import Badge from '../../components/ui/Badge';
 import Toast from '../../components/common/Toast';
+import UserActivityModal from '../../components/admin/UserActivityModal';
 import api from '../../services/api';
-import { Ban, Trash2, CheckCircle2, UserX, AlertTriangle, ShieldAlert, FileText, X } from 'lucide-react';
+import { Ban, Trash2, CheckCircle2, UserX, AlertTriangle, ShieldAlert, FileText, X, Eye } from 'lucide-react';
 
 /**
  * =============================================================================
@@ -47,13 +48,56 @@ export default function ManageOwners() {
   // আপিল রিভিউ মোডাল স্টেট
   const [reviewAppealUser, setReviewAppealUser] = useState(null);
 
+  // ওনার বিস্তারিত ও প্রপার্টিজ মোডাল স্টেট
+  const [activityUser, setActivityUser] = useState(null);
+
   const load = () => {
     api.get('/admin/users?role=OWNER')
-      .then(({ data }) => setUsers(data.users || []))
+      .then(({ data }) => {
+        const dbUsers = data.users || [];
+        let combined = [...dbUsers];
+
+        // যে সকল টেন্যান্ট প্রপার্টি পোস্ট করেছে তাদের ওনার সেকশনে যুক্ত করা
+        try {
+          const localPending = JSON.parse(localStorage.getItem('prent_pending_admin_properties') || '[]');
+          for (const lp of localPending) {
+            const email = lp.owner_email;
+            const phone = lp.owner_phone || lp.phone;
+            const name = lp.owner_name || 'Property Owner';
+            const role = lp.lister_type?.toLowerCase().includes('builder') ? 'TENANT+BUILDER' : 'TENANT+OWNER';
+            if (!combined.some((u) => (email && u.email === email) || (phone && u.phone === phone) || (lp.owner_id && u.id === lp.owner_id))) {
+              combined.unshift({
+                id: lp.owner_id || `local-owner-${lp.id}`,
+                full_name: name,
+                email: email || 'N/A',
+                phone: phone || 'N/A',
+                role,
+                verification_status: lp.verification_status || 'PENDING',
+                account_status: 'ACTIVE',
+                strike_count: 0,
+                property_count: 1,
+              });
+            }
+          }
+        } catch {}
+
+        setUsers(combined);
+      })
       .catch(() => {});
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    const handleSync = () => load();
+    window.addEventListener('prent_user_updated', handleSync);
+    window.addEventListener('prent_new_pending_property', handleSync);
+    window.addEventListener('storage', handleSync);
+    return () => {
+      window.removeEventListener('prent_user_updated', handleSync);
+      window.removeEventListener('prent_new_pending_property', handleSync);
+      window.removeEventListener('storage', handleSync);
+    };
+  }, []);
 
   // স্ট্রাইক ইস্যু করা (Strike 1 বা Strike 2)
   const handleIssueStrike = async () => {
@@ -69,6 +113,27 @@ export default function ManageOwners() {
         strike_count: isStrike2 ? 2 : 1,
         reason: finalReason,
       });
+
+      // লোকাল নোটিফিকেশন ওনার-স্পেসিফিক কী-তে সেভ করা হবে যাতে এডমিনের কাছে না যায়
+      try {
+        const notifItem = {
+          id: `notif-${Date.now()}`,
+          user_id: strikeModalUser.id,
+          type: isStrike2 ? 'ACCOUNT_BLOCKED' : 'ACCOUNT_SUSPENDED',
+          title: isStrike2 ? '⛔ Account Permanently Blocked (Strike 2)' : '⚠️ Owner Account Suspended (Strike 1)',
+          message: isStrike2
+            ? `Admin has permanently blocked your owner account: "${finalReason}". All listing privileges are terminated.`
+            : `Admin has suspended your owner account (Strike 1) for: "${finalReason}". Add property and visit accepts are disabled. Open NestAI to submit rules pledge.`,
+          is_read: false,
+          created_at: new Date().toISOString(),
+        };
+        const userNotifsKey = `prent_user_notifications_${strikeModalUser.id}`;
+        const existingNotifs = JSON.parse(localStorage.getItem(userNotifsKey) || '[]');
+        existingNotifs.unshift(notifItem);
+        localStorage.setItem(userNotifsKey, JSON.stringify(existingNotifs));
+        localStorage.removeItem('prent_user_notifications');
+      } catch {}
+
       setToast({
         type: 'success',
         message: isStrike2
@@ -177,12 +242,38 @@ export default function ManageOwners() {
                 const hasPendingAppeal = isSuspended && u.unblock_appeal_status === 'SUBMITTED';
 
                 return (
-                  <tr key={u.id} className="bg-white shadow-sm transition hover:shadow-md">
-                    <td className="rounded-l-xl px-3 py-3">
-                      <p className="font-bold text-slate-800">{u.full_name}</p>
-                      <p className="text-[11px] text-slate-400">{u.email}</p>
+                  <tr key={u.id} className="bg-white shadow-sm transition hover:shadow-md hover:bg-slate-50/50">
+                    <td className="rounded-l-xl px-3 py-3 cursor-pointer" onClick={() => setActivityUser(u)}>
+                      <div className="flex items-center gap-2">
+                        <div>
+                          <p className="font-bold text-slate-800 hover:text-sky-700 flex items-center gap-1.5 flex-wrap">
+                            {u.full_name}
+                            {u.role === 'TENANT+BUILDER' ? (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 font-extrabold border border-purple-200">
+                                TENANT + BUILDER
+                              </span>
+                            ) : u.role === 'TENANT+OWNER' ? (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-extrabold border border-emerald-200">
+                                TENANT + OWNER
+                              </span>
+                            ) : u.role === 'BUILDER' ? (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 font-extrabold border border-purple-200">
+                                BUILDER
+                              </span>
+                            ) : (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-extrabold border border-blue-200">
+                                OWNER
+                              </span>
+                            )}
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-sky-50 text-sky-700 font-semibold border border-sky-200">
+                              View Properties &amp; Activity 👁️
+                            </span>
+                          </p>
+                          <p className="text-[11px] text-slate-400">{u.email}</p>
+                        </div>
+                      </div>
                     </td>
-                    <td className="px-3 py-3 text-slate-600">{u.phone}</td>
+                    <td className="px-3 py-3 text-slate-600 cursor-pointer" onClick={() => setActivityUser(u)}>{u.phone}</td>
                     
                     <td className="px-3 py-3">
                       <Badge tone={u.verification_status === 'VERIFIED' ? 'green' : u.verification_status === 'REJECTED' ? 'red' : 'amber'}>
@@ -247,6 +338,16 @@ export default function ManageOwners() {
                     {/* এডমিন অ্যাকশন বাটন */}
                     <td className="rounded-r-xl px-3 py-3 text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        {/* ওনার প্রপার্টিজ ও অ্যাক্টিভিটি বাটন */}
+                        <button
+                          onClick={() => setActivityUser(u)}
+                          title="View Owner Properties, Rooms & Transactions"
+                          className="flex items-center gap-1 rounded-lg bg-sky-50 text-sky-800 border border-sky-200 px-2.5 py-1.5 text-xs font-bold hover:bg-sky-100 transition cursor-pointer"
+                        >
+                          <Eye size={13} className="text-sky-700" />
+                          <span>Activity</span>
+                        </button>
+
                         {/* স্ট্রাইক পেনাল্টি বাটন */}
                         <button
                           onClick={() => {
@@ -509,6 +610,15 @@ export default function ManageOwners() {
           </div>
         </div>
       )}
+
+      {/* ওনার ফুল অ্যাক্টিভিটি মোডাল (পোস্ট করা প্রপার্টিজ, রুমস, পেমেন্ট ও ট্রানজ্যাকশন হিস্টোরি) */}
+      <UserActivityModal
+        isOpen={Boolean(activityUser)}
+        onClose={() => setActivityUser(null)}
+        user={activityUser}
+        mode="OWNER"
+        onRefresh={load}
+      />
 
       <Toast toast={toast} onDismiss={() => setToast(null)} />
       <BottomNav />

@@ -19,6 +19,7 @@ import OwnerProfile from './pages/owner/OwnerProfile';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import ManageTenants from './pages/admin/ManageTenants';
 import ManageOwners from './pages/admin/ManageOwners';
+import ManageProperties from './pages/admin/ManageProperties';
 import AdminProfile from './pages/admin/AdminProfile';
 
 function RequireRole({ roles }) {
@@ -97,6 +98,7 @@ export default function App() {
       {/* Protected Admin Routes */}
       <Route element={<RequireRole roles={['ADMIN']} />}>
         <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="/admin/properties" element={<ManageProperties />} />
         <Route path="/admin/tenants" element={<ManageTenants />} />
         <Route path="/admin/owners" element={<ManageOwners />} />
         <Route path="/admin/profile" element={<AdminProfile />} />

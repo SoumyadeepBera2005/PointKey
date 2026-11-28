@@ -23,7 +23,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import { publishRealtime } from '../../services/realtimeSync';
-import { compressImageToDataUrl, storeMediaBlob } from '../../utils/mediaStorage';
+import { compressImageToDataUrl, storeMediaBlob, DEFAULT_ANGLE_PLACEHOLDERS } from '../../utils/mediaStorage';
 
 export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
   const { user, refreshUser } = useAuth();
@@ -530,15 +530,15 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
     // Prioritize self-contained compressed Base64 Data URLs so images & bills work everywhere (Vercel & Localhost)
     const finalAngle1 = (photoAngle1?.preview && photoAngle1.preview.startsWith('data:')) 
       ? photoAngle1.preview 
-      : (uploadedAngle1 || photoAngle1?.preview || photoAngle1?.url || 'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=1200&q=80');
+      : (uploadedAngle1 || photoAngle1?.preview || photoAngle1?.url || DEFAULT_ANGLE_PLACEHOLDERS[0]);
     
     const finalAngle2 = (photoAngle2?.preview && photoAngle2.preview.startsWith('data:')) 
       ? photoAngle2.preview 
-      : (uploadedAngle2 || photoAngle2?.preview || photoAngle2?.url || 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=1200&q=80');
+      : (uploadedAngle2 || photoAngle2?.preview || photoAngle2?.url || DEFAULT_ANGLE_PLACEHOLDERS[1]);
     
     const finalAngle3 = (photoAngle3?.preview && photoAngle3.preview.startsWith('data:')) 
       ? photoAngle3.preview 
-      : (uploadedAngle3 || photoAngle3?.preview || photoAngle3?.url || 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=1200&q=80');
+      : (uploadedAngle3 || photoAngle3?.preview || photoAngle3?.url || DEFAULT_ANGLE_PLACEHOLDERS[2]);
     
     const finalBill = (billPreview && billPreview.startsWith('data:')) 
       ? billPreview 

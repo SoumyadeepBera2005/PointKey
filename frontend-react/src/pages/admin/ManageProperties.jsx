@@ -30,13 +30,9 @@ import AdminEditPropertyModal from '../../components/admin/AdminEditPropertyModa
 import api from '../../services/api';
 import { formatINR } from '../../utils/currencyFormatter';
 import { publishRealtime, subscribeRealtime } from '../../services/realtimeSync';
-import { resolveMediaUrl } from '../../utils/mediaStorage';
+import { resolveMediaUrl, DEFAULT_ANGLE_PLACEHOLDERS } from '../../utils/mediaStorage';
 
-const DEFAULT_ROOM_ANGLES = [
-  'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80',
-  'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=600&q=80',
-  'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=600&q=80',
-];
+const DEFAULT_ROOM_ANGLES = DEFAULT_ANGLE_PLACEHOLDERS;
 const DEFAULT_BILL_FILE = '/assets/images/electric-bill-sample.png';
 const DEFAULT_WALKTHROUGH_VIDEO = '/assets/video/property-video-1.mp4';
 
@@ -48,9 +44,15 @@ const sanitizePropMedia = (p) => {
   } catch { photos = []; }
 
   const cleanPhotos = [0, 1, 2].map((idx) => {
-    const existing = photos[idx];
+    let existing = photos[idx];
+    if (typeof existing === 'string') {
+      try {
+        const parsed = JSON.parse(existing);
+        if (parsed && typeof parsed === 'object') existing = parsed;
+      } catch {}
+    }
     const defaultLabel = idx === 0 ? 'Angle 1 (Front/Entrance)' : idx === 1 ? 'Angle 2 (Living/Bedroom)' : 'Angle 3 (Balcony/Kitchen/Side)';
-    let rawU = existing?.url || existing?.preview || existing?.dataUrl || (idx === 0 ? p.cover_url : '');
+    let rawU = existing?.url || existing?.preview || existing?.dataUrl || (typeof existing === 'string' ? existing : '') || (idx === 0 ? p.cover_url : '');
     let u = resolveMediaUrl(rawU);
     if (!u || u.includes('hero-slide-1.jpg')) {
       u = DEFAULT_ROOM_ANGLES[idx];
@@ -116,38 +118,58 @@ export default function ManageProperties() {
 
       const propMap = new Map();
 
-      // Seed with server properties
+      // Seed with server properties (SERVER IS AUTHORITATIVE SOURCE OF TRUTH)
       serverProps.forEach((p) => {
         if (p && p.id) propMap.set(String(p.id), { ...p });
       });
 
-      // Overlay local collections
-      localPosted.forEach((p) => {
-        if (p && p.id) {
+      // Merge local collections safely: NEVER overwrite server Data URLs with local stale paths
+      const mergeLocalList = (list) => {
+        list.forEach((p) => {
+          if (!p || !p.id) return;
           const key = String(p.id);
-          if (propMap.has(key)) propMap.set(key, { ...propMap.get(key), ...p });
-          else propMap.set(key, { ...p });
-        }
-      });
-
-      pendingAdmin.forEach((p) => {
-        if (p && p.id) {
-          const key = String(p.id);
-          if (propMap.has(key)) propMap.set(key, { ...propMap.get(key), ...p });
-          else propMap.set(key, { ...p });
-        }
-      });
-
-      verifiedAdmin.forEach((p) => {
-        if (p && p.id) {
-          const key = String(p.id);
-          if (propMap.has(key)) {
-            propMap.set(key, { ...propMap.get(key), ...p, verification_status: 'VERIFIED', verified: true });
+          const serverProp = propMap.get(key);
+          if (!serverProp) {
+            propMap.set(key, { ...p });
           } else {
-            propMap.set(key, { ...p, verification_status: 'VERIFIED', verified: true });
+            const hasServerPhotos = Array.isArray(serverProp.photos) && serverProp.photos.length > 0 &&
+              serverProp.photos.some((ph) => {
+                const u = typeof ph === 'string' ? ph : (ph?.url || ph?.preview || '');
+                return u && (u.startsWith('data:') || u.startsWith('http') || u.startsWith('blob:'));
+              });
+            const hasServerCover = serverProp.cover_url && (serverProp.cover_url.startsWith('data:') || serverProp.cover_url.startsWith('http') || serverProp.cover_url.startsWith('blob:'));
+            const hasServerBill = serverProp.electricity_bill_url && (serverProp.electricity_bill_url.startsWith('data:') || serverProp.electricity_bill_url.startsWith('http') || serverProp.electricity_bill_url.startsWith('blob:'));
+
+            propMap.set(key, {
+              ...p,
+              ...serverProp,
+              photos: hasServerPhotos ? serverProp.photos : (p.photos || serverProp.photos),
+              cover_url: hasServerCover ? serverProp.cover_url : (p.cover_url || serverProp.cover_url),
+              electricity_bill_url: hasServerBill ? serverProp.electricity_bill_url : (p.electricity_bill_url || serverProp.electricity_bill_url),
+              video_url: serverProp.video_url || p.video_url,
+            });
           }
-        }
-      });
+        });
+      };
+
+      mergeLocalList(localPosted);
+      mergeLocalList(pendingAdmin);
+      mergeLocalList(verifiedAdmin);
+
+      // Auto-heal local storage with verified server media to eradicate stale 404s permanently
+      try {
+        const heal = (arr) => arr.map((item) => {
+          const s = propMap.get(String(item.id));
+          return s ? {
+            ...item,
+            photos: s.photos || item.photos,
+            cover_url: s.cover_url || item.cover_url,
+            electricity_bill_url: s.electricity_bill_url || item.electricity_bill_url,
+          } : item;
+        });
+        localStorage.setItem('prent_pending_admin_properties', JSON.stringify(heal(pendingAdmin)));
+        localStorage.setItem('prent_user_posted_properties', JSON.stringify(heal(localPosted)));
+      } catch {}
 
       const list = Array.from(propMap.values()).map(sanitizePropMedia);
       list.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));

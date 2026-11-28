@@ -10,13 +10,9 @@ import PropertyVerificationModal from '../../components/admin/PropertyVerificati
 import { formatINR } from '../../utils/currencyFormatter';
 import api from '../../services/api';
 import { publishRealtime, subscribeRealtime } from '../../services/realtimeSync';
-import { resolveMediaUrl } from '../../utils/mediaStorage';
+import { resolveMediaUrl, DEFAULT_ANGLE_PLACEHOLDERS } from '../../utils/mediaStorage';
 
-const DEFAULT_ROOM_ANGLES = [
-  'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80',
-  'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=600&q=80',
-  'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=600&q=80',
-];
+const DEFAULT_ROOM_ANGLES = DEFAULT_ANGLE_PLACEHOLDERS;
 const DEFAULT_BILL_FILE = '/assets/images/electric-bill-sample.png';
 const DEFAULT_WALKTHROUGH_VIDEO = '/assets/video/property-video-1.mp4';
 
@@ -28,9 +24,15 @@ const sanitizePropMedia = (p) => {
   } catch { photos = []; }
 
   const cleanPhotos = [0, 1, 2].map((idx) => {
-    const existing = photos[idx];
+    let existing = photos[idx];
+    if (typeof existing === 'string') {
+      try {
+        const parsed = JSON.parse(existing);
+        if (parsed && typeof parsed === 'object') existing = parsed;
+      } catch {}
+    }
     const defaultLabel = idx === 0 ? 'Angle 1 (Front/Entrance)' : idx === 1 ? 'Angle 2 (Living/Bedroom)' : 'Angle 3 (Balcony/Kitchen/Side)';
-    let rawU = existing?.url || existing?.preview || existing?.dataUrl || (idx === 0 ? p.cover_url : '');
+    let rawU = existing?.url || existing?.preview || existing?.dataUrl || (typeof existing === 'string' ? existing : '') || (idx === 0 ? p.cover_url : '');
     let u = resolveMediaUrl(rawU);
     if (!u || u.includes('hero-slide-1.jpg')) {
       u = DEFAULT_ROOM_ANGLES[idx];
@@ -84,9 +86,22 @@ export default function AdminDashboard() {
       try {
         localPending = JSON.parse(localStorage.getItem('prent_pending_admin_properties') || '[]');
         localPending = localPending.map(sanitizePropMedia);
-        localStorage.setItem('prent_pending_admin_properties', JSON.stringify(localPending));
       } catch { }
-      const combined = [...localPending, ...dbProps.filter((dp) => !localPending.some((lp) => lp.id === dp.id))];
+
+      // Authoritative merge: DB properties take priority
+      const propMap = new Map();
+      dbProps.forEach((p) => { if (p && p.id) propMap.set(String(p.id), p); });
+      localPending.forEach((lp) => {
+        if (!lp || !lp.id) return;
+        const key = String(lp.id);
+        if (!propMap.has(key)) {
+          propMap.set(key, lp);
+        }
+      });
+      const combined = Array.from(propMap.values());
+      try {
+        localStorage.setItem('prent_pending_admin_properties', JSON.stringify(combined));
+      } catch { }
       setPendingProps(combined);
     }).catch(() => {
       try {

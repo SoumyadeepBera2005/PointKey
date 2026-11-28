@@ -22,13 +22,9 @@ import {
   Download
 } from 'lucide-react';
 import { formatINR } from '../../utils/currencyFormatter';
-import { getMediaBlobUrl, resolveMediaUrl } from '../../utils/mediaStorage';
+import { getMediaBlobUrl, resolveMediaUrl, DEFAULT_ANGLE_PLACEHOLDERS } from '../../utils/mediaStorage';
 
-const DEFAULT_ANGLES = [
-  'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=1200&q=80',
-  'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=1200&q=80',
-  'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=1200&q=80',
-];
+const DEFAULT_ANGLES = DEFAULT_ANGLE_PLACEHOLDERS;
 
 const SAMPLE_BILL_PREVIEW = '/assets/images/electric-bill-sample.png';
 
@@ -177,9 +173,15 @@ export default function PropertyVerificationModal({ property, isOpen, onClose, o
 
   // Ensure 3 angles exist and resolve relative URLs to backend host
   const safePhotos = [0, 1, 2].map((idx) => {
-    const p = rawPhotos[idx];
+    let p = rawPhotos[idx];
+    if (typeof p === 'string') {
+      try {
+        const parsed = JSON.parse(p);
+        if (parsed && typeof parsed === 'object') p = parsed;
+      } catch {}
+    }
     const defaultLabel = idx === 0 ? 'Angle 1 (Front/Entrance)' : idx === 1 ? 'Angle 2 (Living/Bedroom)' : 'Angle 3 (Balcony/Kitchen/Side)';
-    let rawUrl = p?.url || p?.preview || p?.dataUrl || (idx === 0 ? property.cover_url : '');
+    let rawUrl = p?.url || p?.preview || p?.dataUrl || (typeof p === 'string' ? p : '') || (idx === 0 ? property.cover_url : '');
     let url = resolveMediaUrl(rawUrl);
     if (!url || url.includes('hero-slide-1.jpg')) {
       url = DEFAULT_ANGLES[idx];

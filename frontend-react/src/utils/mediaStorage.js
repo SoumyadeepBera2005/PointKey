@@ -181,6 +181,17 @@ export function getBackendBaseUrl() {
  * Resolves any relative media URL (like /uploads/xxx.jpg) to the absolute backend URL
  * Prevents 404s and unwanted fallbacks on Vercel
  */
+export function getAnglePlaceholder(angleNum = 1, angleLabel = 'Room Angle') {
+  const safeLabel = encodeURIComponent(angleLabel);
+  return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600" fill="%23f8fafc"><rect width="100%" height="100%" fill="%23f8fafc"/><rect x="24" y="24" width="752" height="552" rx="20" fill="%23ffffff" stroke="%23cbd5e1" stroke-width="2" stroke-dasharray="8 8"/><g fill="%2317324D" transform="translate(360, 210)"><circle cx="40" cy="40" r="40" fill="%23e2e8f0"/><path d="M26 44l8-10 6 7 10-13 14 16H26z" fill="%2394a3b8"/><circle cx="34" cy="28" r="4" fill="%2394a3b8"/></g><text x="50%" y="335" text-anchor="middle" font-family="sans-serif" font-size="20" font-weight="800" fill="%2317324D">Angle ${angleNum}: ${safeLabel}</text><text x="50%" y="370" text-anchor="middle" font-family="sans-serif" font-size="14" font-weight="600" fill="%23047857">✓ PointKey Anti-Fake Verification</text><text x="50%" y="400" text-anchor="middle" font-family="sans-serif" font-size="12" fill="%2394a3b8">Owner Upload Authenticity Checked</text></svg>`;
+}
+
+export const DEFAULT_ANGLE_PLACEHOLDERS = [
+  getAnglePlaceholder(1, 'Angle 1 (Front/Entrance)'),
+  getAnglePlaceholder(2, 'Angle 2 (Living/Bedroom)'),
+  getAnglePlaceholder(3, 'Angle 3 (Balcony/Kitchen/Side)'),
+];
+
 export function resolveMediaUrl(url) {
   if (!url || typeof url !== 'string') return '';
   const trimmed = url.trim();

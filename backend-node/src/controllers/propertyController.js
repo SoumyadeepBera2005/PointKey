@@ -54,7 +54,32 @@ async function getProperty(req, res, next) {
       'SELECT * FROM property_media WHERE property_id = ? ORDER BY is_cover DESC, captured_date DESC',
       [req.params.id]
     );
-    property.photos = parseJson(raw.photos) || [];
+    let parsedPhotos = parseJson(raw.photos) || [];
+    if (!Array.isArray(parsedPhotos)) parsedPhotos = [];
+    property.photos = parsedPhotos.map((ph, idx) => {
+      let item = ph;
+      if (typeof item === 'string') {
+        try {
+          const parsed = JSON.parse(item);
+          if (parsed && typeof parsed === 'object') item = parsed;
+        } catch {}
+      }
+      if (typeof item === 'string') {
+        return {
+          label: idx === 0 ? 'Angle 1 (Front/Entrance)' : idx === 1 ? 'Angle 2 (Living/Bedroom)' : 'Angle 3 (Balcony/Kitchen/Side)',
+          name: `photo_angle_${idx + 1}.jpg`,
+          url: toAbsoluteMediaUrl(req, item),
+          preview: toAbsoluteMediaUrl(req, item),
+        };
+      }
+      return {
+        ...item,
+        label: item?.label || (idx === 0 ? 'Angle 1 (Front/Entrance)' : idx === 1 ? 'Angle 2 (Living/Bedroom)' : 'Angle 3 (Balcony/Kitchen/Side)'),
+        name: item?.name || `photo_angle_${idx + 1}.jpg`,
+        url: toAbsoluteMediaUrl(req, item?.url || item?.preview || item?.dataUrl),
+        preview: toAbsoluteMediaUrl(req, item?.preview || item?.dataUrl || item?.url),
+      };
+    });
     property.cover_url = toAbsoluteMediaUrl(req, property.cover_url);
     property.video_url = toAbsoluteMediaUrl(req, property.video_url);
     property.electricity_bill_url = toAbsoluteMediaUrl(req, property.electricity_bill_url);

@@ -14,13 +14,9 @@ import {
   Film
 } from 'lucide-react';
 import { formatDate } from '../../utils/dateTimestampHelper';
-import { getMediaBlobUrl, resolveMediaUrl } from '../../utils/mediaStorage';
+import { getMediaBlobUrl, resolveMediaUrl, DEFAULT_ANGLE_PLACEHOLDERS } from '../../utils/mediaStorage';
 
-const ROOM_ANGLE_FALLBACKS = [
-  'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=1200',
-  'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?w=1200',
-  'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=1200',
-];
+const ROOM_ANGLE_FALLBACKS = DEFAULT_ANGLE_PLACEHOLDERS;
 
 const DEFAULT_SAMPLE_VIDEO = '/assets/video/property-video-1.mp4';
 

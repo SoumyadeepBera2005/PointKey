@@ -21,7 +21,7 @@ import { useAuth } from '../../context/AuthContext';
 import { formatINR } from '../../utils/currencyFormatter';
 import api from '../../services/api';
 import { subscribeRealtime } from '../../services/realtimeSync';
-import { resolveMediaUrl } from '../../utils/mediaStorage';
+import { resolveMediaUrl, DEFAULT_ANGLE_PLACEHOLDERS } from '../../utils/mediaStorage';
 
 /**
  * Robust Error Boundary to guarantee the screen never goes blank
@@ -77,11 +77,7 @@ function getSafePhotos(rawPhotos) {
     }
   }
   if (!Array.isArray(list)) return [];
-  const ROOM_FALLBACKS = [
-    'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80',
-    'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=600&q=80',
-    'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=600&q=80',
-  ];
+  const ROOM_FALLBACKS = DEFAULT_ANGLE_PLACEHOLDERS;
   return list.map((item, idx) => {
     let rawUrl = typeof item === 'string' ? item : (item?.url || item?.preview || item?.dataUrl || '');
     let url = resolveMediaUrl(rawUrl);
@@ -509,11 +505,7 @@ export default function MyPropertiesModal({ isOpen, onClose, onOpenPostProperty 
                                       alt={ph.label} 
                                       className="w-full h-18 object-cover bg-slate-100" 
                                       onError={(e) => { 
-                                        e.currentTarget.src = [
-                                          'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80',
-                                          'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=600&q=80',
-                                          'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=600&q=80'
-                                        ][idx % 3]; 
+                                        e.currentTarget.src = DEFAULT_ANGLE_PLACEHOLDERS[idx % 3];
                                       }}
                                     />
                                     <span className="block text-[9px] font-bold text-center py-0.5 bg-slate-50 truncate px-1 text-slate-600">

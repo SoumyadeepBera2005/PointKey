@@ -118,6 +118,61 @@ async function verifyProperty(req, res, next) {
   } catch (e) { next(e); }
 }
 
+function formatAdminPropertyRow(req, r) {
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+  const host = req.get('host') || 'localhost:5000';
+  const toAbs = (u) => {
+    if (!u || typeof u !== 'string') return u;
+    if (u.startsWith('/uploads/') || u.startsWith('uploads/')) {
+      const clean = u.startsWith('/') ? u : `/${u}`;
+      return `${protocol}://${host}${clean}`;
+    }
+    return u;
+  };
+
+  let photos = [];
+  try {
+    photos = typeof r.photos === 'string' ? JSON.parse(r.photos) : (Array.isArray(r.photos) ? r.photos : []);
+  } catch { photos = []; }
+
+  photos = photos.map((ph, idx) => {
+    let item = ph;
+    if (typeof item === 'string') {
+      try {
+        const parsed = JSON.parse(item);
+        if (parsed && typeof parsed === 'object') item = parsed;
+      } catch {}
+    }
+    if (typeof item === 'string') {
+      return {
+        label: idx === 0 ? 'Angle 1 (Front/Entrance)' : idx === 1 ? 'Angle 2 (Living/Bedroom)' : 'Angle 3 (Balcony/Kitchen/Side)',
+        name: `photo_angle_${idx + 1}.jpg`,
+        url: toAbs(item),
+        preview: toAbs(item),
+      };
+    }
+    if (item && typeof item === 'object') {
+      return {
+        ...item,
+        label: item.label || (idx === 0 ? 'Angle 1 (Front/Entrance)' : idx === 1 ? 'Angle 2 (Living/Bedroom)' : 'Angle 3 (Balcony/Kitchen/Side)'),
+        name: item.name || `photo_angle_${idx + 1}.jpg`,
+        url: toAbs(item.url || item.preview || item.dataUrl),
+        preview: toAbs(item.preview || item.dataUrl || item.url),
+      };
+    }
+    return item;
+  });
+
+  return {
+    ...r,
+    photos,
+    cover_url: toAbs(r.cover_url),
+    video_url: toAbs(r.video_url),
+    electricity_bill_url: toAbs(r.electricity_bill_url),
+    location: [r.locality, r.city].filter(Boolean).join(', ') || 'Kolkata',
+  };
+}
+
 // GET /api/v1/admin/properties/pending
 async function pendingProperties(req, res, next) {
   try {
@@ -131,7 +186,7 @@ async function pendingProperties(req, res, next) {
        FROM properties p JOIN users u ON u.id = p.owner_id
        WHERE p.verification_status IN ('PENDING', 'UNDER_REVIEW') ORDER BY p.created_at DESC`
     );
-    res.json({ properties: rows });
+    res.json({ properties: rows.map((r) => formatAdminPropertyRow(req, r)) });
   } catch (e) { next(e); }
 }
 
@@ -615,45 +670,7 @@ async function listAllProperties(req, res, next) {
       params
     );
 
-    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
-    const host = req.get('host') || 'localhost:5000';
-    const toAbs = (u) => {
-      if (!u || typeof u !== 'string') return u;
-      if (u.startsWith('/uploads/') || u.startsWith('uploads/')) {
-        const clean = u.startsWith('/') ? u : `/${u}`;
-        return `${protocol}://${host}${clean}`;
-      }
-      return u;
-    };
-
-    const parsed = rows.map((r) => {
-      let photos = [];
-      try {
-        photos = typeof r.photos === 'string' ? JSON.parse(r.photos) : (Array.isArray(r.photos) ? r.photos : []);
-      } catch { photos = []; }
-
-      photos = photos.map((ph) => {
-        if (typeof ph === 'string') return toAbs(ph);
-        if (ph && typeof ph === 'object') {
-          return {
-            ...ph,
-            url: toAbs(ph.url || ph.preview),
-            preview: toAbs(ph.preview || ph.url),
-          };
-        }
-        return ph;
-      });
-
-      return {
-        ...r,
-        photos,
-        cover_url: toAbs(r.cover_url),
-        video_url: toAbs(r.video_url),
-        electricity_bill_url: toAbs(r.electricity_bill_url),
-        location: [r.locality, r.city].filter(Boolean).join(', ') || 'Kolkata',
-      };
-    });
-
+    const parsed = rows.map((r) => formatAdminPropertyRow(req, r));
     res.json({ properties: parsed, count: parsed.length });
   } catch (e) { next(e); }
 }

@@ -282,11 +282,14 @@ export default function Navbar({
           position: sticky;
           top: 0;
           z-index: 40;
-          background: #0b2545;
+          background: rgba(11, 37, 69, 0.45);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
           color: #ffffff;
-          border-bottom: 1px solid #153858;
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+          border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+          box-shadow: 0 4px 25px rgba(0, 0, 0, 0.12);
           font-family: 'Montserrat', 'Segoe UI', system-ui, sans-serif;
+          transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
         }
 
         .pk-header-inner {
@@ -322,14 +325,22 @@ export default function Navbar({
 
         .pk-brand-logo-box {
           height: 42px;
-          padding: 3px 8px;
+          width: 42px;
+          padding: 0;
           border-radius: 12px;
-          background: #f8f5ed;
-          border: 1px solid rgba(255, 255, 255, 0.2);
+          overflow: hidden;
+          background: transparent;
+          border: 1px solid rgba(255, 255, 255, 0.25);
           display: flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+          box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+          transition: transform 0.2s ease, border-color 0.2s ease;
+        }
+
+        .pk-brand-link:hover .pk-brand-logo-box {
+          transform: scale(1.05);
+          border-color: rgba(255, 255, 255, 0.4);
         }
 
         .pk-brand-name {
@@ -722,7 +733,7 @@ export default function Navbar({
                 <img
                   src="/assets/images/pointkey-brand-logo.png"
                   alt="PointKey"
-                  style={{ height: '32px', width: 'auto', objectFit: 'contain' }}
+                  style={{ height: '100%', width: '100%', objectFit: 'cover' }}
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
                   }}

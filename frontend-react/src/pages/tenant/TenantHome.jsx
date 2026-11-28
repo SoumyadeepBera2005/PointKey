@@ -2134,8 +2134,9 @@ export default function TenantHome() {
         }
       `}</style>
 
-      {/* TOP NAVIGATION BAR (STICKY, DARK NAVY DESIGN MATCHING REFERENCE VIDEO) */}
+      {/* TOP NAVIGATION BAR (TRANSPARENT FLOATING OVER HERO SLIDESHOW) */}
       <Navbar
+        transparent={true}
         activePillar={activePillar}
         onSwitchPillar={(pillar) => setActivePillar(pillar)}
         onSelectLocation={(loc) => {
@@ -2150,31 +2151,6 @@ export default function TenantHome() {
         onOpenServices={() => setActivePillar('FacilityKart')}
         onOpenExpenses={() => setActivePillar('BudgetKart')}
       />
-
-      {/* POPULAR LOCATIONS BAR DIRECTLY UNDER NAVBAR */}
-      <div className="relative z-30 bg-white border-b border-[#e8e0d3] shadow-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex flex-wrap items-center justify-center sm:justify-start gap-2 text-xs sm:text-sm">
-          <span className="font-extrabold text-[#0b2545] mr-1 flex items-center gap-1.5">
-            <span style={{ color: '#FF9A1F', fontSize: '14px' }}>📍</span>
-            <span>Popular Locations:</span>
-          </span>
-          {['Rajpur Sonarpur', 'Jadavpur', 'Garia', 'Salt Lake', 'New Town'].map((loc) => (
-            <button
-              key={loc}
-              type="button"
-              onClick={() => {
-                setSelectedCity(loc);
-                setSearchQuery(loc);
-                showToast(`Filtered listings for ${loc}`);
-                scrollToListings();
-              }}
-              className="px-3.5 py-1 rounded-full bg-[#f6f1e7] hover:bg-[#FF9A1F] hover:text-white text-[#0b2545] font-semibold border border-[#d8cba9] transition cursor-pointer"
-            >
-              {loc}
-            </button>
-          ))}
-        </div>
-      </div>
 
       {/* STICKY SEARCH BAR ON SCROLL (MATCHING IMAGE 1 DESIGN) */}
       <div
@@ -2216,7 +2192,7 @@ export default function TenantHome() {
       </div>
 
       {/* ==================== 2. HERO SECTION WITH 7-IMAGE LOOPING SLIDESHOW ==================== */}
-      <section id="top" className="relative overflow-hidden bg-[#0b2545] flex min-h-[540px] sm:min-h-[620px]">
+      <section id="top" className="relative overflow-hidden bg-[#0b2545] flex min-h-[580px] sm:min-h-[660px] -mt-[68px] lg:-mt-[74px] pt-[68px] lg:pt-[74px]">
         {/* Animated background slideshow (7 images, looping) */}
         <div className="hero-bg" aria-hidden="true">
           <div className="hero-slide" style={{ backgroundImage: "url('/assets/images/hero-slide-1.jpg')" }} />
@@ -2335,6 +2311,31 @@ export default function TenantHome() {
           </div>
         </div>
       </section>
+
+      {/* POPULAR LOCATIONS BAR DIRECTLY UNDER HERO */}
+      <div className="relative z-30 bg-white border-b border-[#e8e0d3] shadow-xs">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex flex-wrap items-center justify-center sm:justify-start gap-2 text-xs sm:text-sm">
+          <span className="font-extrabold text-[#0b2545] mr-1 flex items-center gap-1.5">
+            <span style={{ color: '#FF9A1F', fontSize: '14px' }}>📍</span>
+            <span>Popular Locations:</span>
+          </span>
+          {['Rajpur Sonarpur', 'Jadavpur', 'Garia', 'Salt Lake', 'New Town'].map((loc) => (
+            <button
+              key={loc}
+              type="button"
+              onClick={() => {
+                setSelectedCity(loc);
+                setSearchQuery(loc);
+                showToast(`Filtered listings for ${loc}`);
+                scrollToListings();
+              }}
+              className="px-3.5 py-1 rounded-full bg-[#f6f1e7] hover:bg-[#FF9A1F] hover:text-white text-[#0b2545] font-semibold border border-[#d8cba9] transition cursor-pointer"
+            >
+              {loc}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* MAIN CONTENT AREA */}
       <main className="pk-main-content">

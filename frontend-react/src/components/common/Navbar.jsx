@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import { getSocket } from '../../services/socket';
@@ -18,9 +18,25 @@ export default function Navbar({
   onOpenExpenses,
   activePillar = 'SearchKart',
   onSwitchPillar,
+  transparent = false,
 }) {
   const { user, logout, openAuthModal } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 20);
+    };
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const isHomeRoute = location?.pathname === '/' || location?.pathname === '/tenant' || location?.pathname === '';
+  const isCurrentlyTransparent = (transparent || isHomeRoute) && !isScrolled;
 
   // Location selector state
   const [locationOpen, setLocationOpen] = useState(false);
@@ -281,15 +297,29 @@ export default function Navbar({
         .pk-header-root {
           position: sticky;
           top: 0;
-          z-index: 40;
-          background: rgba(11, 37, 69, 0.45);
+          z-index: 50;
+          color: #ffffff;
+          font-family: 'Montserrat', 'Segoe UI', system-ui, sans-serif;
+          transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, backdrop-filter 0.3s ease;
+        }
+
+        /* 100% CRYSTAL CLEAR TRANSPARENT NAVBAR OVER HERO */
+        .pk-header-root.pk-header-transparent {
+          background: transparent !important;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.15) !important;
+          box-shadow: none !important;
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
+        }
+
+        /* SOLID / SCROLLED NAVBAR */
+        .pk-header-root.pk-header-solid,
+        .pk-header-root.is-scrolled {
+          background: rgba(11, 37, 69, 0.90) !important;
           backdrop-filter: blur(16px);
           -webkit-backdrop-filter: blur(16px);
-          color: #ffffff;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-          box-shadow: 0 4px 25px rgba(0, 0, 0, 0.12);
-          font-family: 'Montserrat', 'Segoe UI', system-ui, sans-serif;
-          transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+          box-shadow: 0 4px 25px rgba(0, 0, 0, 0.25) !important;
         }
 
         .pk-header-inner {
@@ -715,7 +745,7 @@ export default function Navbar({
         }
       `}</style>
 
-      <header className="pk-header-root">
+      <header className={`pk-header-root ${isCurrentlyTransparent ? 'pk-header-transparent' : 'pk-header-solid'} ${isScrolled ? 'is-scrolled' : ''}`}>
         <div className="pk-header-inner">
           {/* Left: Brand Logo & Location Picker */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>

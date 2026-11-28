@@ -139,6 +139,7 @@ export default function ManageProperties() {
               });
             const hasServerCover = serverProp.cover_url && (serverProp.cover_url.startsWith('data:') || serverProp.cover_url.startsWith('http') || serverProp.cover_url.startsWith('blob:'));
             const hasServerBill = serverProp.electricity_bill_url && (serverProp.electricity_bill_url.startsWith('data:') || serverProp.electricity_bill_url.startsWith('http') || serverProp.electricity_bill_url.startsWith('blob:'));
+            const hasServerVideo = serverProp.video_url && (serverProp.video_url.startsWith('data:') || serverProp.video_url.startsWith('http') || serverProp.video_url.startsWith('blob:'));
 
             propMap.set(key, {
               ...p,
@@ -146,7 +147,7 @@ export default function ManageProperties() {
               photos: hasServerPhotos ? serverProp.photos : (p.photos || serverProp.photos),
               cover_url: hasServerCover ? serverProp.cover_url : (p.cover_url || serverProp.cover_url),
               electricity_bill_url: hasServerBill ? serverProp.electricity_bill_url : (p.electricity_bill_url || serverProp.electricity_bill_url),
-              video_url: serverProp.video_url || p.video_url,
+              video_url: hasServerVideo ? serverProp.video_url : (p.video_url || serverProp.video_url),
             });
           }
         });
@@ -165,6 +166,7 @@ export default function ManageProperties() {
             photos: s.photos || item.photos,
             cover_url: s.cover_url || item.cover_url,
             electricity_bill_url: s.electricity_bill_url || item.electricity_bill_url,
+            video_url: s.video_url || item.video_url,
           } : item;
         });
         localStorage.setItem('prent_pending_admin_properties', JSON.stringify(heal(pendingAdmin)));

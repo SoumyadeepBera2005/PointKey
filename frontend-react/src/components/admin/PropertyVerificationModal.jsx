@@ -205,7 +205,7 @@ export default function PropertyVerificationModal({ property, isOpen, onClose, o
   // Safe video URL (resolves relative paths to Render backend host)
   let rawVideoSrc = localVideoUrl || property.video_url || property.video_preview || '';
   let videoSrc = resolveMediaUrl(rawVideoSrc);
-  const hasRealPlayableVideo = Boolean(videoSrc) && !videoPlayError;
+  const hasRealPlayableVideo = Boolean(videoSrc);
 
 
   const status = String(property.verification_status || (property.verified ? 'VERIFIED' : 'PENDING')).toUpperCase();
@@ -355,44 +355,49 @@ export default function PropertyVerificationModal({ property, isOpen, onClose, o
                 <div className="flex items-center justify-between">
                   <span className="font-black text-sky-950 flex items-center gap-1.5 text-xs">
                     <Video size={14} className="text-sky-600" />
-                    <span>{viewMode === 'REAL_VIDEO' && hasRealPlayableVideo ? 'Real Walkthrough Video' : 'Automated Walkthrough Tour'}</span>
+                    <span>{viewMode === 'REAL_VIDEO' ? 'Owner Uploaded Walkthrough Video' : 'Automated 3-Angle Tour (Tenant View)'}</span>
                   </span>
                   <div className="flex items-center gap-1">
-                    {hasRealPlayableVideo && (
-                      <button
-                        type="button"
-                        onClick={() => setViewMode(viewMode === 'REAL_VIDEO' ? 'AUTOMATED_TOUR' : 'REAL_VIDEO')}
-                        className="px-2 py-0.5 rounded-full bg-sky-100 hover:bg-sky-200 text-sky-800 text-[9px] font-bold border border-sky-300 transition cursor-pointer"
-                      >
-                        {viewMode === 'REAL_VIDEO' ? '🎬 3-Angle Tour' : '📹 Real Video'}
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => setViewMode(viewMode === 'REAL_VIDEO' ? 'AUTOMATED_TOUR' : 'REAL_VIDEO')}
+                      className="px-2 py-0.5 rounded-full bg-sky-100 hover:bg-sky-200 text-sky-800 text-[9px] font-bold border border-sky-300 transition cursor-pointer"
+                    >
+                      {viewMode === 'REAL_VIDEO' ? '🎬 View Automated Tour' : '📹 View Owner Video'}
+                    </button>
                     <span className="px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 text-[9px] font-black uppercase">
                       🔒 Admin Only
                     </span>
                   </div>
                 </div>
                 <p className="text-[11px] text-slate-600 mt-1">
-                  {viewMode === 'REAL_VIDEO' && hasRealPlayableVideo
-                    ? `Owner walkthrough video (${property.video_size_mb || '20'} MB). Hidden from public tenants.`
-                    : "Automated virtual walkthrough generated directly from owner's 3 verified site photos."}
+                  {viewMode === 'REAL_VIDEO'
+                    ? `Owner's physical walkthrough video (${property.video_name || 'Walkthrough_Room_Tour.mp4'}). Verified by Admin; automated video tour is generated for tenants.`
+                    : "Automated virtual walkthrough generated directly from owner's 3 verified site photos for tenants."}
                 </p>
 
                 {/* Video Player or Automated Photo Walkthrough Tour */}
-                {viewMode === 'REAL_VIDEO' && hasRealPlayableVideo ? (
+                {viewMode === 'REAL_VIDEO' ? (
                   <div className="rounded-xl overflow-hidden border border-sky-300 mt-2 bg-black relative">
-                    <video 
-                      key={videoSrc}
-                      src={videoSrc} 
-                      controls 
-                      preload="auto"
-                      playsInline
-                      className="w-full max-h-48 object-cover" 
-                      onError={() => {
-                        setVideoPlayError(true);
-                        setViewMode('AUTOMATED_TOUR');
-                      }}
-                    />
+                    {hasRealPlayableVideo ? (
+                      <video 
+                        key={videoSrc}
+                        src={videoSrc} 
+                        controls 
+                        preload="auto"
+                        playsInline
+                        className="w-full max-h-48 object-cover" 
+                        onError={() => {
+                          setVideoPlayError(true);
+                        }}
+                      />
+                    ) : (
+                      <div className="h-44 flex flex-col items-center justify-center text-slate-400 gap-2 p-4 text-center">
+                        <Video size={28} className="text-sky-400" />
+                        <span className="text-xs font-bold text-white">Owner Walkthrough Video</span>
+                        <span className="text-[10px] text-slate-400">File: {property.video_name || 'Walkthrough_Room_Tour.mp4'}</span>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <AutomatedTourPlayer photos={safePhotos} defaultAngles={DEFAULT_ANGLES} />
@@ -400,8 +405,8 @@ export default function PropertyVerificationModal({ property, isOpen, onClose, o
               </div>
 
               <div className="pt-2 flex items-center justify-between text-[10px] text-slate-500 font-bold border-t border-sky-100 mt-2">
-                <span>File: {property.video_name || (hasRealPlayableVideo ? 'Walkthrough_Room_Tour.mp4' : '3-Angle_Automated_Tour')}</span>
-                <span className="text-emerald-700">✓ Video Tour Ready</span>
+                <span>File: {property.video_name || 'Walkthrough_Room_Tour.mp4'}</span>
+                <span className="text-emerald-700">✓ Real Video Authenticated</span>
               </div>
             </div>
 

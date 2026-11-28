@@ -378,6 +378,7 @@ export default function Navbar({
           font-weight: 900;
           letter-spacing: -0.5px;
           color: #ffffff;
+          text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8), 0 2px 8px rgba(0, 0, 0, 0.6);
         }
 
         .pk-brand-name span {
@@ -481,23 +482,28 @@ export default function Navbar({
           gap: 6px;
           padding: 8px 14px;
           border-radius: 10px;
-          color: #e2e8f0;
+          color: #ffffff !important;
           background: transparent;
           border: none;
-          font-size: 13.5px;
-          font-weight: 700;
+          font-size: 14px;
+          font-weight: 800;
+          letter-spacing: -0.2px;
+          text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9), 0 2px 8px rgba(0, 0, 0, 0.7);
           cursor: pointer;
           transition: all 0.18s ease;
         }
 
         .nav-trigger:hover,
         .nav-group:hover .nav-trigger {
-          color: #FF9A1F;
-          background: rgba(255, 255, 255, 0.06);
+          color: #FFB347 !important;
+          background: rgba(255, 255, 255, 0.15);
+          text-shadow: 0 2px 8px rgba(0, 0, 0, 0.95);
         }
 
         .nav-trigger .chevron {
-          font-size: 9px;
+          font-size: 10px;
+          color: #ffffff !important;
+          filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.9));
           transition: transform 0.2s ease;
         }
 

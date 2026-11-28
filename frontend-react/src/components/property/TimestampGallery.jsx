@@ -29,7 +29,7 @@ const DEFAULT_SAMPLE_VIDEO = '/assets/video/property-video-1.mp4';
  * 2. Automated Virtual Walkthrough Video Tour generated directly from owner's 3 angle photos.
  * 3. Real video player toggle if owner uploaded a walkthrough video.
  */
-export default function TimestampGallery({ media = [], videoUrl = null, propertyTitle = '' }) {
+export default function TimestampGallery({ media = [], videoUrl = null, propertyTitle = '', property = null }) {
   const [active, setActive] = useState(0);
   const [isTourMode, setIsTourMode] = useState(false);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -241,6 +241,38 @@ export default function TimestampGallery({ media = [], videoUrl = null, property
             </button>
           </div>
         </div>
+
+        {/* Cinematic Property Details Overlay written inside the Automated Video Tour */}
+        {isTourMode && !showRealVideo && (
+          <div className="absolute top-12 left-3 z-20 max-w-[270px] sm:max-w-[340px] rounded-2xl bg-black/75 backdrop-blur-md border border-white/20 p-2.5 sm:p-3 text-white shadow-2xl transition-all">
+            <div className="flex items-center gap-1.5">
+              <span className="px-1.5 py-0.5 rounded-full bg-emerald-500 text-[9px] font-black uppercase text-white flex items-center gap-1">
+                <ShieldCheck size={10} /> VERIFIED
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-white/20 text-[9px] font-bold text-white/90">
+                {property?.category || 'FLAT'} · {property?.sub_type || property?.type || '2 BHK'}
+              </span>
+            </div>
+            <h4 className="mt-1 font-black text-xs sm:text-sm text-white truncate drop-shadow-md">
+              {propertyTitle || property?.title || 'Verified Property'}
+            </h4>
+            <div className="mt-1 flex items-baseline gap-2">
+              <span className="text-xs sm:text-sm font-extrabold text-[#FF9A1F]">
+                ₹{Number(property?.rent_amount || property?.price || 12000).toLocaleString('en-IN')}<span className="text-[9px] text-white/70">/mo</span>
+              </span>
+              <span className="text-[9px] text-white/75">
+                Deposit: ₹{Number(property?.advance_amount || property?.deposit || 24000).toLocaleString('en-IN')}
+              </span>
+            </div>
+            <div className="mt-1 flex items-center gap-2 text-[9px] text-white/80 border-t border-white/10 pt-1">
+              <span>📐 {property?.roomSize || (property?.size_sqft ? `${property.size_sqft} sq ft` : '424 sq ft')}</span>
+              <span>•</span>
+              <span>🏢 {property?.floor || property?.roof_floor_type || '3rd floor / 8 floors'}</span>
+              <span>•</span>
+              <span>📍 {property?.locality || property?.location || 'Kolkata'}</span>
+            </div>
+          </div>
+        )}
 
         {/* Next / Prev Buttons in manual mode */}
         {!isTourMode && !showRealVideo && items.length > 1 && (

@@ -309,6 +309,9 @@ export default function PropertyVerificationModal({ property, isOpen, onClose, o
                 <span>Owner &amp; Contact Details</span>
               </h4>
               <p><strong>Name:</strong> {property.owner_name || 'N/A'}</p>
+              {(property.owner_gender || property.ownerGender) && (
+                <p><strong>Gender:</strong> {property.owner_gender || property.ownerGender}</p>
+              )}
               <p><strong>Phone:</strong> 📞 +91 {property.owner_phone || property.phone || 'N/A'}</p>
               {property.alternate_phone && <p><strong>Alt Phone:</strong> 📞 +91 {property.alternate_phone}</p>}
               {property.owner_whatsapp && <p><strong>WhatsApp:</strong> 💬 +91 {property.owner_whatsapp}</p>}
@@ -344,18 +347,32 @@ export default function PropertyVerificationModal({ property, isOpen, onClose, o
           <div className="p-3.5 bg-white rounded-2xl border border-[#e5dac4] space-y-2">
             <h4 className="font-black text-slate-800 flex items-center gap-1.5 text-xs">
               <Home size={13} className="text-indigo-600" />
-              <span>Property Specifications &amp; Rules</span>
+              <span>Property Specifications &amp; Terms</span>
             </h4>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-slate-600">
-              <p><strong>Gender:</strong> {property.allowed_gender || 'Any'}</p>
-              <p><strong>Tenant:</strong> {property.allowed_tenant_type || 'Any'}</p>
-              <p><strong>Sharing:</strong> {property.room_sharing_capacity || 1} Person(s)</p>
-              <p><strong>Bathroom:</strong> {property.bathroom_type || 'Private'}</p>
-              <p><strong>Furnishing:</strong> {property.furnishing_status || 'Semi-Furnished'}</p>
-              <p><strong>Kitchen:</strong> {property.kitchen_available !== false ? 'Available' : 'No'}</p>
-              <p><strong>Water Bill:</strong> {property.water_bill_included ? 'Included' : 'Separate'}</p>
-              <p><strong>Electricity:</strong> {property.electricity_bill_included ? 'Included' : 'Separate'}</p>
+              <p><strong>Room Size:</strong> {property.roomSize || (property.size_sqft ? `${property.size_sqft} sq ft` : '450 sq ft')}</p>
+              <p><strong>Floor:</strong> {property.floor || property.roof_floor_type || '2nd floor'}</p>
+              <p><strong>Roof:</strong> {property.roof || 'RCC roof'}</p>
+              <p><strong>Bathroom:</strong> {property.bathroom_type || property.bathroom || 'Private'}</p>
+              <p><strong>Furnishing:</strong> {property.furnishing_status || property.furnishing || 'Semi-Furnished'}</p>
+              <p><strong>Kitchen:</strong> {property.kitchen_type || property.kitchen || 'Private'}</p>
+              <p><strong>Electricity:</strong> {property.electric || (property.electricity_bill_included ? 'Included' : '₹8/unit')}</p>
+              <p><strong>Water:</strong> {property.water || 'Free building water'}</p>
+              <p><strong>Contract:</strong> {property.contract || `Min ${property.contract_months || 6} mo`}</p>
+              <p><strong>Rent Due:</strong> {property.rentDue || 'By 5th'}</p>
+              <p><strong>Missed Rent:</strong> {property.missedRent || 'Max 1 mo'}</p>
+              <p><strong>Occupancy:</strong> {property.roommate || property.occupancy || 'Private'}</p>
             </div>
+            {property.furniture && (
+              <p className="text-[11px] bg-emerald-50/70 p-2 rounded-xl border border-emerald-200 text-emerald-950">
+                <strong>🛋️ Furniture &amp; Inventory:</strong> {property.furniture}
+              </p>
+            )}
+            {property.environment && (
+              <p className="text-[11px] bg-sky-50/70 p-2 rounded-xl border border-sky-200 text-sky-950">
+                <strong>🌳 Environment:</strong> {property.environment}
+              </p>
+            )}
             {property.rules_and_regulations && (
               <p className="text-[11px] bg-amber-50/60 p-2 rounded-xl border border-amber-200/80 text-amber-950">
                 <strong>House Rules:</strong> {property.rules_and_regulations}

@@ -1,10 +1,31 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { MapPin, ShieldCheck, Phone, Mail, MessageCircle, BedDouble, Bath, Zap, Droplets, CalendarClock, Flag, Undo2, CheckCircle2, Utensils, Ruler, Home as HomeIcon } from 'lucide-react';
+import { 
+  MapPin, 
+  ShieldCheck, 
+  Phone, 
+  Mail, 
+  MessageCircle, 
+  BedDouble, 
+  Bath, 
+  Zap, 
+  Droplets, 
+  CalendarClock, 
+  Flag, 
+  Undo2, 
+  CheckCircle2, 
+  Utensils, 
+  Ruler, 
+  Home as HomeIcon,
+  Lock,
+  Unlock,
+  ExternalLink,
+  Sparkles,
+  CalendarDays
+} from 'lucide-react';
 import Navbar from '../../components/common/Navbar';
 import BottomNav from '../../components/common/BottomNav';
 import TimestampGallery from '../../components/property/TimestampGallery';
-import LockedLocationCard from '../../components/property/LockedLocationCard';
 import RatingStars from '../../components/ui/RatingStars';
 import Badge from '../../components/ui/Badge';
 import Toast from '../../components/common/Toast';
@@ -18,7 +39,7 @@ import { subscribeRealtime } from '../../services/realtimeSync';
 export default function PropertyDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, openAuthModal } = useAuth();
   const isSuspended = user?.account_status === 'SUSPENDED';
   const isBlocked = user?.account_status === 'BLOCKED';
 
@@ -315,8 +336,118 @@ export default function PropertyDetails() {
     ? `${coords.lat},${coords.lng}`
     : p.exact_address || `${p.locality || ''}, ${p.city || 'Kolkata'}`;
 
+  // Facts for "Property overview"
+  const facts = [
+    { label: 'Room size', value: p.roomSize || (p.size_sqft ? `${p.size_sqft} sq ft` : '424 sq ft') },
+    { label: 'Floor', value: p.floor || p.roof_floor_type || '3rd floor / 8 floors' },
+    { label: 'Roof', value: p.roof || 'RCC roof' },
+    { label: 'Environment', value: p.environment || 'Well-connected residential area with nearby shops, transport and daily essentials' }
+  ];
+
+  // Details for "Rooms & facilities"
+  const details = [
+    { label: 'Bathrooms', value: p.bathroom || (p.bathroom_type === 'PRIVATE' ? 'Private' : 'Common') },
+    { label: 'Kitchen', value: p.kitchen || (p.kitchen_available ? 'Available' : "Don't need") },
+    { label: 'Electricity', value: p.electric || (p.electricity_bill_included ? 'Included in rent' : '₹8/unit') },
+    { label: 'Water', value: p.water || (p.water_bill_included ? 'Free — standard building water supply' : 'Free — standard building water supply') },
+    { label: 'Furniture & appliances', value: p.furniture || (Array.isArray(p.room_materials) && p.room_materials.length > 0 ? p.room_materials.map(m => `${m}: Yes`).join(' · ') : 'Bed: Yes · Table: Yes · Chair: Yes · Light: Yes · Fan: Yes') },
+    { label: 'Roommates', value: p.roommate || (p.sub_type ? `${p.sub_type} occupancy` : '3 resident(s)') },
+    { label: 'Visitors', value: p.visitors || (p.allow_parents_friends ? 'Visitors allowed subject to house/building rules' : 'Visitors allowed subject to house/building rules') }
+  ];
+
+  // Terms for "💰 Rent & payment terms"
+  const terms = [
+    { label: 'Monthly rent', value: formatINR(p.rent_amount || p.price || 12000) },
+    { label: 'Advance / deposit', value: formatINR(p.advance_amount || p.deposit || 24000) },
+    { label: 'Minimum stay / contract', value: p.contract || `Minimum ${p.contract_months || 1} months` },
+    { label: 'Rent due date', value: p.rentDue || 'Rent due by the 5th of every month' },
+    { label: 'Missed rent limit', value: p.missedRent || 'Maximum 1 month can remain unpaid' }
+  ];
+
+  // Rules for "📜 Rules & regulations"
+  const rules = Array.isArray(p.rules) && p.rules.length > 0
+    ? p.rules
+    : (typeof p.rules_and_regulations === 'string' && p.rules_and_regulations.length > 5
+      ? p.rules_and_regulations.split(/[.\n]+/).map(s => s.trim()).filter(Boolean)
+      : [
+          'No illegal activities',
+          'No structural changes without owner approval',
+          'Keep common areas clean',
+          'Follow building quiet hours',
+          'Owner approval required for commercial use'
+        ]);
+
+  // Nearby places & transport
+  const nearbyPlaces = Array.isArray(p.nearby) && p.nearby.length > 0
+    ? p.nearby.map(x => ({ icon: x[0], name: x[1], distance: x[2], desc: x[3] }))
+    : [
+        { icon: '🏧', name: `Bank/ATM — ${p.locality || 'Ballygunge'}`, distance: '0.6 km', desc: 'ATM and basic banking services' },
+        { icon: '🛒', name: `Local Market — ${p.locality || 'Ballygunge'}`, distance: '0.9 km', desc: 'Groceries and daily essentials' },
+        { icon: '🏥', name: `Nearby Clinic/Hospital — ${p.locality || 'Ballygunge'}`, distance: '1.8 km', desc: 'Medical and emergency support' },
+        { icon: '🚇', name: `Nearest Metro/Transit — ${p.locality || 'Ballygunge'}`, distance: '2.2 km', desc: 'Public transport connection' }
+      ];
+
+  const transportModes = Array.isArray(p.transport) && p.transport.length > 0
+    ? p.transport.map(x => ({ icon: x[0], name: x[1], desc: x[2] }))
+    : [
+        { icon: '🛺', name: 'Auto', desc: 'Easy local rides' },
+        { icon: '🛵', name: 'Toto / E-rickshaw', desc: 'Short-distance connectivity' },
+        { icon: '🚌', name: 'Bus', desc: 'Regular city routes' },
+        { icon: '🚕', name: 'Cab / App Cab', desc: 'Door-to-door travel' },
+        { icon: '🚇', name: 'Metro / Transit', desc: 'Fast city commute' }
+      ];
+
+  const handlePayClick = (e) => {
+    if (!user) {
+      e?.preventDefault?.();
+      openAuthModal?.('input', 'tenant', 'Please log in to pay and unlock property details.');
+      return;
+    }
+    if (isSuspended) {
+      e?.preventDefault?.();
+      alert('⚠️ Payment disabled: Your account is suspended (Strike 1). Open the NestAI chatbot to submit an unblock appeal.');
+      return;
+    }
+    if (isBlocked) {
+      e?.preventDefault?.();
+      alert('⛔ Account Permanently Blocked (Strike 2): You cannot unlock properties or make payments.');
+      return;
+    }
+    navigate(`/tenant/property/${id}/checkout`);
+  };
+
+  const handleContactClick = () => {
+    if (!unlocked) {
+      handlePayClick();
+      return;
+    }
+    if (p.owner_phone) {
+      window.open(`tel:${p.owner_phone}`, '_self');
+    } else if (p.owner_whatsapp) {
+      window.open(`https://wa.me/${p.owner_whatsapp.replace(/\D/g, '')}`, '_blank');
+    } else {
+      setToast({ type: 'info', message: `Owner contact: ${p.owner_name} · ${p.owner_email || 'Verified on PointKey'}` });
+    }
+  };
+
+  const handleVisitClick = () => {
+    if (!user) {
+      openAuthModal?.('input', 'tenant', 'Please log in to request a property visit.');
+      return;
+    }
+    navigate(`/tenant/property/${id}/visit`);
+  };
+
+  const handleBookingClick = () => {
+    if (!user) {
+      openAuthModal?.('input', 'tenant', 'Please log in to book this property.');
+      return;
+    }
+    navigate(`/tenant/property/${id}/checkout`);
+  };
+
   return (
-    <div className="min-h-screen bg-surface pb-24 md:pb-0">
+    <div className="min-h-screen bg-[#f6efdf] text-[#141414] pb-24 md:pb-16 font-sans">
       <Navbar />
       {isSuspended && (
         <div className="mx-auto max-w-6xl px-4 pt-4">
@@ -334,196 +465,392 @@ export default function PropertyDetails() {
           </div>
         </div>
       )}
-      <main className="mx-auto max-w-6xl gap-6 px-4 py-5 lg:grid lg:grid-cols-5">
-        {/* Left column — gallery + details */}
-        <div className="space-y-5 lg:col-span-3">
-          <TimestampGallery media={p.media} videoUrl={p.video_url} propertyTitle={p.title} />
 
-          <div className="glass-card p-5">
-            <div className="flex flex-wrap items-center gap-2">
-              {p.verification_status === 'VERIFIED' && (
-                <Badge tone="green"><ShieldCheck size={12} /> Verified listing</Badge>
-              )}
-              <Badge tone="slate">{p.category} · {String(p.sub_type || '').replace('_', ' ')}</Badge>
-              <Badge tone={p.booking_status === 'BOOKED' ? 'red' : 'green'}>{p.booking_status}</Badge>
-            </div>
-            <h1 className="mt-2 text-2xl font-black text-slate-800">{p.title}</h1>
-            <p className="mt-1 flex items-center gap-1 text-sm text-slate-500">
-              <MapPin size={14} /> {p.locality}, {p.city}
-              {!unlocked && <span className="text-slate-300"> — exact address locked</span>}
-            </p>
-            <div className="mt-2"><RatingStars value={Number(p.average_rating || 0)} /></div>
-
-            {/* Financials */}
-            <div className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4 sm:grid-cols-4">
-              <div>
-                <p className="label">Rent</p>
-                <p className="font-extrabold text-trust">{formatINR(p.rent_amount)}<span className="text-[10px] font-medium text-slate-400">/mo</span></p>
-              </div>
-              <div>
-                <p className="label">Advance</p>
-                <p className="font-bold text-slate-700">{formatINR(p.advance_amount)}</p>
-              </div>
-              <div>
-                <p className="label"><CalendarClock size={12} className="inline" /> Contract</p>
-                <p className="font-bold text-slate-700">{p.contract_months} mo</p>
-              </div>
-              <div>
-                <p className="label"><Ruler size={12} className="inline" /> Size</p>
-                <p className="font-bold text-slate-700">{p.size_sqft || '—'} sqft</p>
-              </div>
-            </div>
-
-            <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-medium text-slate-600">
-              <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1">
-                <Droplets size={12} /> Water bill {p.water_bill_included ? 'incl.' : 'extra'}
-              </span>
-              <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1">
-                <Zap size={12} /> Electricity {p.electricity_bill_included ? 'incl.' : 'extra'}
-              </span>
-              {p.food_included ? (
-                <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1">
-                  <Utensils size={12} /> Food included
-                </span>
-              ) : null}
-              <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1">
-                <Bath size={12} /> {p.bathroom_type === 'PRIVATE' ? 'Private' : 'Common'} bathroom
-              </span>
-              {p.kitchen_available ? (
-                <span className="rounded-full bg-slate-100 px-2.5 py-1">Kitchen available</span>
-              ) : null}
-              <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1">
-                <HomeIcon size={12} /> {p.roof_floor_type || '—'}
-              </span>
-            </div>
-
-            {/* Room inventory & rules */}
-            {Array.isArray(p.room_materials) && p.room_materials.length > 0 && (
-              <div className="mt-4">
-                <p className="label"><BedDouble size={12} className="inline" /> Room inventory</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {p.room_materials.map((m) => (
-                    <span key={m} className="rounded-full border border-slate-200 px-2.5 py-1 text-[11px] font-medium text-slate-600">{m}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {p.rules_and_regulations && (
-              <div className="mt-3">
-                <p className="label">House rules</p>
-                <p className="text-sm text-slate-600">{p.rules_and_regulations}</p>
-                <p className="mt-1 text-[11px] text-slate-400">Parents/friends allowed: {p.allow_parents_friends ? 'Yes' : 'No'}</p>
-              </div>
-            )}
-
-            {/* Nearby connectivity */}
-            {p.nearby_landmarks && (
-              <div className="mt-4">
-                <p className="label">Nearby connectivity</p>
-                <div className="flex flex-wrap gap-2 text-[11px] text-slate-600">
-                  {Object.entries(p.nearby_landmarks).filter(([k]) => k !== 'transport').map(([k, v]) => (
-                    <span key={k} className="rounded-full bg-sky-50 px-2.5 py-1 font-medium text-sky-700">{k.replace('_', ' ')}: {String(v)}</span>
-                  ))}
-                  {Array.isArray(p.nearby_landmarks.transport) && p.nearby_landmarks.transport.map((t) => (
-                    <span key={t} className="rounded-full bg-sky-50 px-2.5 py-1 font-medium text-sky-700">{t}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+      <main className="mx-auto max-w-6xl px-4 py-6 space-y-7">
+        {/* Breadcrumb matching video: Home › Explore Homes › Property details */}
+        <div className="text-xs text-[#5b5547] flex items-center gap-1.5 font-medium">
+          <Link to="/" className="hover:underline">Home</Link>
+          <span>›</span>
+          <Link to="/" className="hover:underline">Explore Homes</Link>
+          <span>›</span>
+          <span className="font-extrabold text-[#1f4d3f] truncate">{p.title || 'Property details'}</span>
         </div>
 
-        {/* Right column — privacy gate / unlocked owner card */}
-        <div className="mt-5 space-y-5 lg:col-span-2 lg:mt-0">
-          {!unlocked ? (
-            <LockedLocationCard propertyId={id} />
-          ) : (
-            <div className="glass-card p-5">
-              <div className="flex items-center gap-2 text-emerald-600">
-                <CheckCircle2 size={18} />
-                <p className="text-xs font-bold uppercase tracking-widest">Property Unlocked</p>
+        {/* HERO SECTION matching video */}
+        <section className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
+          {/* Gallery / Automated Video Tour (Left 3 cols) */}
+          <div className="lg:col-span-3">
+            <TimestampGallery 
+              media={p.media} 
+              videoUrl={p.video_url} 
+              propertyTitle={p.title} 
+              property={p} 
+            />
+          </div>
+
+          {/* Hero Card (Right 2 cols) */}
+          <aside className="lg:col-span-2 rounded-3xl bg-white/95 border border-[#1f4d3f]/30 p-6 shadow-xl flex flex-col justify-between relative overflow-hidden">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-black border border-emerald-300">
+                  <ShieldCheck size={13} /> VERIFIED PROPERTY
+                </span>
+                <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 text-[11px] font-bold">
+                  {p.category} · {String(p.sub_type || p.type || '').replace('_', ' ')}
+                </span>
               </div>
-              <h3 className="mt-2 text-lg font-extrabold text-slate-800">{p.owner_name}</h3>
-              <p className="text-xs text-slate-500">Verified owner · {p.owner_verification_status}</p>
-              {p.exact_address && (
-                <p className="mt-3 flex items-start gap-2 rounded-xl bg-emerald-50 p-3 text-sm font-medium text-emerald-900">
-                  <MapPin size={16} className="mt-0.5 shrink-0" />
-                  {p.exact_address}
-                </p>
-              )}
-              {(coords || p.exact_address) && (
-                <div className="mt-3">
-                  <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm bg-slate-100">
-                    <iframe
-                      title="Google Maps Location"
-                      width="100%"
-                      height="220"
-                      style={{ border: 0 }}
-                      loading="lazy"
-                      src={
-                        mapsKey
-                          ? `https://www.google.com/maps/embed/v1/place?key=${mapsKey}&q=${encodeURIComponent(mapQuery)}&zoom=15`
-                          : `https://maps.google.com/maps?q=${encodeURIComponent(mapQuery)}&t=&z=15&ie=UTF8&iwloc=&output=embed`
-                      }
-                    />
-                  </div>
-                  <div className="mt-2 flex items-center justify-between px-1 text-xs">
-                    <span className="flex items-center gap-1 font-semibold text-emerald-700">
-                      <CheckCircle2 size={13} /> Exact location unlocked
-                    </span>
-                    <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="font-bold text-[#4F7A63] hover:underline"
-                    >
-                      Open in Google Maps ↗
-                    </a>
-                  </div>
+
+              <h1 className="mt-3 text-2xl sm:text-3xl font-black text-slate-800 leading-tight">
+                {p.title}
+              </h1>
+
+              <div className="mt-1 flex items-center gap-1.5 text-sm text-[#5b5547]">
+                <MapPin size={15} className="text-[#1f4d3f] shrink-0" />
+                <span>{p.locality}, {p.city || 'Kolkata'}</span>
+                {!unlocked && <span className="text-slate-400 text-xs"> — exact address locked</span>}
+              </div>
+
+              <div className="mt-3 flex items-center gap-2">
+                <RatingStars value={Number(p.average_rating || 4.8)} />
+                <span className="text-xs font-bold text-slate-600">({p.average_rating || 4.8} / 5.0)</span>
+              </div>
+
+              <div className="mt-4 text-3xl font-black text-[#1f4d3f]">
+                {formatINR(p.rent_amount || p.price || 12000)}
+                <span className="text-xs font-semibold text-slate-500"> /month</span>
+              </div>
+
+              {/* Mini Grid matching reference video */}
+              <div className="mt-5 grid grid-cols-2 gap-2.5">
+                <div className="rounded-2xl border border-[#ebe1c9] bg-[#fbf7f0] p-3 text-left transition hover:-translate-y-0.5">
+                  <small className="block text-[10px] font-semibold text-[#5b5547] uppercase tracking-wider">Type</small>
+                  <b className="mt-0.5 block text-xs font-black text-slate-800">{p.sub_type || p.type || p.category || '1 BHK'}</b>
+                </div>
+                <div className="rounded-2xl border border-[#ebe1c9] bg-[#fbf7f0] p-3 text-left transition hover:-translate-y-0.5">
+                  <small className="block text-[10px] font-semibold text-[#5b5547] uppercase tracking-wider">Availability</small>
+                  <b className="mt-0.5 block text-xs font-black text-emerald-700">{p.availability || (p.booking_status === 'BOOKED' ? 'Booked' : 'Available now')}</b>
+                </div>
+                <div className="rounded-2xl border border-[#ebe1c9] bg-[#fbf7f0] p-3 text-left transition hover:-translate-y-0.5">
+                  <small className="block text-[10px] font-semibold text-[#5b5547] uppercase tracking-wider">Deposit</small>
+                  <b className="mt-0.5 block text-xs font-black text-slate-800">{formatINR(p.advance_amount || p.deposit || 24000)}</b>
+                </div>
+                <div className="rounded-2xl border border-[#ebe1c9] bg-[#fbf7f0] p-3 text-left transition hover:-translate-y-0.5">
+                  <small className="block text-[10px] font-semibold text-[#5b5547] uppercase tracking-wider">Contract</small>
+                  <b className="mt-0.5 block text-xs font-black text-slate-800">{p.contract || `Minimum ${p.contract_months || 6} months`}</b>
+                </div>
+              </div>
+            </div>
+
+            {/* Unlock Button matching video */}
+            <div className="mt-6">
+              {!unlocked ? (
+                <button
+                  type="button"
+                  onClick={handlePayClick}
+                  className="w-full rounded-2xl py-3.5 px-4 font-black text-sm text-white bg-gradient-to-r from-[#1f4d3f] via-[#e08a1e] to-[#1f2f6b] hover:opacity-95 shadow-lg shadow-emerald-950/20 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                >
+                  <Lock size={16} />
+                  <span>Unlock exact location + owner contact</span>
+                </button>
+              ) : (
+                <div className="w-full rounded-2xl py-3 px-4 text-center font-black text-xs text-emerald-800 bg-emerald-100 border border-emerald-300 flex items-center justify-center gap-1.5">
+                  <CheckCircle2 size={16} />
+                  <span>Property Unlocked · Verified Access</span>
                 </div>
               )}
-              <div className="mt-4 flex flex-col gap-2">
-                {p.owner_phone && (
-                  <a href={`tel:${p.owner_phone}`} className="btn-primary w-full">
-                    <Phone size={16} /> Call {p.owner_phone}
-                  </a>
-                )}
-                {p.owner_whatsapp && (
-                  <a href={`https://wa.me/${p.owner_whatsapp.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" className="btn-outline w-full">
-                    <MessageCircle size={16} /> WhatsApp
-                  </a>
-                )}
-                {p.owner_email && (
-                  <a href={`mailto:${p.owner_email}`} className="btn-outline w-full">
-                    <Mail size={16} /> Email owner
-                  </a>
-                )}
+              <p className="mt-2 text-center text-[10px] font-semibold text-slate-400">
+                100% refundable if your room is not confirmed
+              </p>
+            </div>
+          </aside>
+        </section>
+
+        {/* SECTION 1: Property overview */}
+        <section className="rounded-3xl bg-white/95 border border-[#1f4d3f]/25 p-6 sm:p-7 shadow-md">
+          <h2 className="text-xl sm:text-2xl font-black text-slate-800 flex items-center gap-3">
+            <span className="w-1.5 h-6 rounded-full bg-gradient-to-b from-[#1f4d3f] to-[#e08a1e]" />
+            <span>Property overview</span>
+          </h2>
+          <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            {facts.map((f, i) => (
+              <div key={i} className="rounded-2xl border border-[#ebe1c9] bg-gradient-to-br from-[#fbf7f0] to-[#f4ebe0] p-4 transition hover:-translate-y-1 hover:shadow-md">
+                <span className="block text-[11px] font-bold text-[#5b5547] uppercase tracking-wider">{f.label}</span>
+                <b className="mt-1 block text-sm sm:text-base font-black text-slate-800">{f.value}</b>
               </div>
-              <div className="mt-4 flex gap-2 border-t border-slate-100 pt-3">
-                <Link to={`/tenant/property/${id}/visit`} className="btn-outline flex-1 text-center text-xs">
-                  Book in-person visit
-                </Link>
-                <button onClick={requestRefund} className="flex items-center gap-1 text-xs text-slate-400 hover:text-rose-600">
-                  <Undo2 size={14} /> Request refund
+            ))}
+          </div>
+        </section>
+
+        {/* SECTION 2: Rooms & facilities */}
+        <section className="rounded-3xl bg-white/95 border border-[#1f4d3f]/25 p-6 sm:p-7 shadow-md">
+          <h2 className="text-xl sm:text-2xl font-black text-slate-800 flex items-center gap-3">
+            <span className="w-1.5 h-6 rounded-full bg-gradient-to-b from-[#1f2f6b] to-[#1f4d3f]" />
+            <span>Rooms & facilities</span>
+          </h2>
+          <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            {details.map((d, i) => (
+              <div key={i} className="rounded-2xl border border-[#ebe1c9] bg-[#fbf7f0] p-4 transition hover:-translate-y-0.5">
+                <h3 className="text-xs font-bold text-[#5b5547] uppercase tracking-wider">{d.label}</h3>
+                <p className="mt-1 text-sm font-black text-slate-800">{d.value}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* SECTION 3: 💰 Rent & payment terms */}
+        <section className="rounded-3xl bg-white/95 border border-[#1f4d3f]/25 p-6 sm:p-7 shadow-md">
+          <h2 className="text-xl sm:text-2xl font-black text-slate-800 flex items-center gap-3">
+            <span className="w-1.5 h-6 rounded-full bg-gradient-to-b from-[#e08a1e] to-[#1f4d3f]" />
+            <span>💰 Rent & payment terms</span>
+          </h2>
+          <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            {terms.map((t, i) => (
+              <div key={i} className="rounded-2xl border border-[#ebe1c9] bg-[#fbf7f0] p-4 transition hover:-translate-y-0.5">
+                <h3 className="text-xs font-bold text-[#5b5547] uppercase tracking-wider">{t.label}</h3>
+                <p className="mt-1 text-sm font-black text-slate-800">{t.value}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* SECTION 4: 📜 Rules & regulations */}
+        <section className="rounded-3xl bg-white/95 border border-[#1f4d3f]/25 p-6 sm:p-7 shadow-md">
+          <h2 className="text-xl sm:text-2xl font-black text-slate-800 flex items-center gap-3">
+            <span className="w-1.5 h-6 rounded-full bg-gradient-to-b from-[#e08a1e] to-[#1f4d3f]" />
+            <span>📜 Rules & regulations</span>
+          </h2>
+          <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
+            {rules.map((rule, idx) => (
+              <div key={idx} className="rounded-2xl border border-[#ebe1c9] bg-[#fbf7f0] p-3.5 text-xs font-bold text-slate-800 flex items-center gap-2.5 transition hover:translate-x-1">
+                <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 text-xs">✓</span>
+                <span>{rule}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* SECTION 5: 📍 Nearby places & transport */}
+        <section className="rounded-3xl bg-white/95 border border-[#1f4d3f]/25 p-6 sm:p-7 shadow-md">
+          <h2 className="text-xl sm:text-2xl font-black text-slate-800 flex items-center gap-3">
+            <span className="w-1.5 h-6 rounded-full bg-gradient-to-b from-[#1f2f6b] to-[#1f4d3f]" />
+            <span>📍 Nearby places & transport</span>
+          </h2>
+          <p className="mt-2 text-xs sm:text-sm text-[#5b5547]">
+            Useful places around this property — with names, approximate distance and quick map access. In the production version, PointKey can populate these automatically from Google Places/Maps.
+          </p>
+
+          {/* 4 Places Grid matching reference video */}
+          <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            {nearbyPlaces.map((pl, idx) => (
+              <div key={idx} className="rounded-2xl border border-[#ebe1c9] bg-[#fbf7f0] p-4 flex flex-col justify-between transition hover:-translate-y-1 hover:shadow-md">
+                <div>
+                  <div className="flex items-start gap-2.5">
+                    <div className="w-10 h-10 rounded-xl bg-white border border-[#ebe1c9] flex items-center justify-center text-xl shrink-0 shadow-xs">
+                      {pl.icon}
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-slate-800 leading-tight">{pl.name}</h4>
+                      <span className="inline-block mt-1 px-2 py-0.5 rounded-full bg-white border border-[#ebe1c9] text-[10px] font-bold text-[#1f2f6b]">
+                        📍 {pl.distance} away
+                      </span>
+                    </div>
+                  </div>
+                  <p className="mt-2.5 text-[11px] text-[#5b5547] leading-relaxed">{pl.desc}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${pl.name} ${p.locality || ''} ${p.city || 'Kolkata'}`)}`, '_blank')}
+                  className="mt-3 w-full rounded-xl py-2 px-3 bg-gradient-to-r from-[#1f2f6b] to-[#1f4d3f] text-white text-[11px] font-black hover:opacity-90 shadow-sm transition flex items-center justify-center gap-1 cursor-pointer"
+                >
+                  <ExternalLink size={12} />
+                  <span>🗺️ View on Google Maps</span>
                 </button>
               </div>
+            ))}
+          </div>
+
+          {/* Transport Box matching video */}
+          <div className="mt-5 rounded-2xl border border-[#ebe1c9] bg-gradient-to-r from-[#fbf7f0] to-[#f4ebe0] p-4 sm:p-5">
+            <h3 className="text-sm sm:text-base font-black text-[#1f4d3f] flex items-center gap-2">
+              <span>🚦 Transport available</span>
+            </h3>
+            <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5">
+              {transportModes.map((t, idx) => (
+                <div key={idx} className="rounded-xl border border-[#ebe1c9] bg-white p-3 text-center transition hover:-translate-y-1 hover:shadow-sm">
+                  <div className="text-2xl">{t.icon}</div>
+                  <b className="mt-1 block text-xs font-black text-slate-800">{t.name}</b>
+                  <span className="mt-0.5 block text-[10px] text-[#5b5547]">{t.desc}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <p className="mt-3 text-[10px] text-[#5b5547]">
+            Prototype distances and place names are sample data. Live PointKey listings can use Google Places/Maps to calculate current distance and route information.
+          </p>
+        </section>
+
+        {/* SECTION 6: Exact location & owner contact are protected Banner matching video */}
+        <section className="rounded-3xl bg-gradient-to-r from-[#17324D] via-[#1f4d3f] to-[#1f4d3f] text-white p-6 sm:p-7 shadow-xl flex flex-col md:flex-row items-center justify-between gap-5 relative overflow-hidden">
+          <div className="space-y-2">
+            <h2 className="text-xl sm:text-2xl font-black text-white">
+              Exact location & owner contact are protected
+            </h2>
+            <p className="text-xs sm:text-sm text-emerald-100/90 max-w-2xl leading-relaxed">
+              To reduce unwanted visits, spam and privacy risks, PointKey keeps these two sensitive details locked until the tenant completes the unlock payment.
+            </p>
+            <ul className="list-disc list-inside text-xs text-emerald-200/90 pt-1 space-y-1">
+              <li>Exact room/property location on Google Maps</li>
+              <li>Verified property owner contact details</li>
+            </ul>
+          </div>
+          <button
+            type="button"
+            onClick={handlePayClick}
+            className="shrink-0 rounded-2xl py-3.5 px-6 font-black text-sm text-[#1f4d3f] bg-white hover:bg-emerald-50 shadow-lg shadow-black/20 transition-all cursor-pointer whitespace-nowrap active:scale-98"
+          >
+            {unlocked ? '✓ Already Unlocked' : `Unlock for ${formatINR(p.advance_amount || 49)}`}
+          </button>
+        </section>
+
+        {/* SECTION 7: 🔐 Exact location & owner details matching video */}
+        <section className="rounded-3xl bg-white/95 border border-[#1f4d3f]/25 p-6 sm:p-7 shadow-md space-y-5">
+          <h2 className="text-xl sm:text-2xl font-black text-slate-800 flex items-center gap-3">
+            <span className="w-1.5 h-6 rounded-full bg-gradient-to-b from-[#1f4d3f] to-[#1f2f6b]" />
+            <span>🔐 Exact location & owner details</span>
+          </h2>
+
+          {/* Google Maps Embed / Lock Container */}
+          <div className="relative h-72 sm:h-80 w-full rounded-2xl overflow-hidden border border-[#ebe1c9] bg-gradient-to-br from-[#f6efdf] to-[#e3ecdf] shadow-inner">
+            {!unlocked ? (
+              // Map Lock Screen matching video
+              <div className="absolute inset-0 flex items-center justify-center p-4 bg-white/70 backdrop-blur-xs">
+                <div className="max-w-xs rounded-2xl border border-[#ebe1c9] bg-white p-5 text-center shadow-2xl">
+                  <div className="text-4xl">📍</div>
+                  <h3 className="mt-2 text-base font-black text-slate-800">Exact location locked</h3>
+                  <p className="mt-1 text-xs text-[#5b5547] leading-relaxed">
+                    Pay the unlock fee to reveal the exact Google Maps location and verified owner details.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handlePayClick}
+                    className="mt-3.5 w-full rounded-xl py-2 px-3 bg-[#1f4d3f] text-white text-xs font-black hover:bg-[#17324D] transition cursor-pointer"
+                  >
+                    Unlock Location & Owner
+                  </button>
+                </div>
+              </div>
+            ) : (
+              // Unlocked Live Interactive Map
+              <iframe
+                title="Google Maps Location"
+                width="100%"
+                height="100%"
+                style={{ border: 0 }}
+                loading="lazy"
+                src={
+                  mapsKey
+                    ? `https://www.google.com/maps/embed/v1/place?key=${mapsKey}&q=${encodeURIComponent(mapQuery)}&zoom=15`
+                    : `https://maps.google.com/maps?q=${encodeURIComponent(mapQuery)}&t=&z=15&ie=UTF8&iwloc=&output=embed`
+                }
+              />
+            )}
+          </div>
+
+          {unlocked && (
+            <div className="flex items-center justify-between px-1 text-xs font-semibold text-emerald-700">
+              <span className="flex items-center gap-1">
+                <CheckCircle2 size={14} /> Exact Google Maps location unlocked
+              </span>
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`}
+                target="_blank"
+                rel="noreferrer"
+                className="font-bold text-[#1f4d3f] hover:underline flex items-center gap-1"
+              >
+                <span>Open in Google Maps</span>
+                <ExternalLink size={12} />
+              </a>
             </div>
           )}
 
-          <div className="glass-card p-5">
-            <p className="label">Rate this property</p>
-            <div className="mt-2 flex items-center justify-between">
-              <RatingStars value={rating} interactive onChange={submitRating} />
-              <button onClick={reportScam} className="flex items-center gap-1 text-xs font-semibold text-rose-600 hover:underline">
-                <Flag size={12} /> Report scam
-              </button>
+          {/* 4 Owner Details Cards matching video */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 pt-1">
+            <div className="rounded-2xl border border-[#ebe1c9] bg-gradient-to-br from-white to-[#fbf7f0] p-4 transition hover:-translate-y-0.5">
+              <small className="block text-[10px] font-bold text-[#5b5547] uppercase tracking-wider">Owner name</small>
+              <strong className="mt-1 block text-sm font-black text-slate-800 truncate">
+                {unlocked ? (p.owner_name || p.owner || 'Verified Landlord') : '🔒 Locked'}
+              </strong>
+            </div>
+            <div className="rounded-2xl border border-[#ebe1c9] bg-gradient-to-br from-white to-[#fbf7f0] p-4 transition hover:-translate-y-0.5">
+              <small className="block text-[10px] font-bold text-[#5b5547] uppercase tracking-wider">Gender</small>
+              <strong className="mt-1 block text-sm font-black text-slate-800">
+                {unlocked ? (p.owner_gender || p.ownerGender || 'Landlord') : '🔒 Locked'}
+              </strong>
+            </div>
+            <div className="rounded-2xl border border-[#ebe1c9] bg-gradient-to-br from-white to-[#fbf7f0] p-4 transition hover:-translate-y-0.5">
+              <small className="block text-[10px] font-bold text-[#5b5547] uppercase tracking-wider">Contact number</small>
+              <strong className="mt-1 block text-sm font-black text-slate-800 truncate">
+                {unlocked ? (p.owner_phone || p.contact || '+91 98300 12345') : '🔒 Locked'}
+              </strong>
+            </div>
+            <div className="rounded-2xl border border-[#ebe1c9] bg-gradient-to-br from-white to-[#fbf7f0] p-4 transition hover:-translate-y-0.5">
+              <small className="block text-[10px] font-bold text-[#5b5547] uppercase tracking-wider">Email ID</small>
+              <strong className="mt-1 block text-sm font-black text-slate-800 truncate">
+                {unlocked ? (p.owner_email || 'owner@pointkey.in') : '🔒 Locked'}
+              </strong>
             </div>
           </div>
-        </div>
+
+          {/* 3 Action Buttons matching video */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+            <button
+              type="button"
+              onClick={handleContactClick}
+              className="rounded-2xl py-3.5 px-4 font-black text-xs text-white bg-gradient-to-r from-[#1f4d3f] to-[#e08a1e] hover:opacity-95 shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+            >
+              <MessageCircle size={15} />
+              <span>💬 Request to Contact</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleVisitClick}
+              className="rounded-2xl py-3.5 px-4 font-black text-xs text-[#1f4d3f] bg-white border border-[#ebe1c9] hover:bg-slate-50 shadow-sm transition flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+            >
+              <CalendarDays size={15} />
+              <span>📅 Request to Visit Property</span>
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleBookingClick}
+            className="w-full rounded-2xl py-4 px-4 font-black text-sm text-white bg-gradient-to-r from-[#1f4d3f] via-[#17324D] to-[#1f4d3f] hover:opacity-95 shadow-lg shadow-black/15 transition flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+          >
+            <span>🏠 Book This Property</span>
+          </button>
+        </section>
+
+        {/* SECTION 8: Rate & Report Scam */}
+        <section className="rounded-3xl bg-white/95 border border-[#1f4d3f]/25 p-5 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold text-[#5b5547] uppercase tracking-wider">Rate this property</p>
+            <div className="mt-1.5">
+              <RatingStars value={rating} interactive onChange={submitRating} />
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={reportScam}
+            className="flex items-center gap-1.5 text-xs font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer"
+          >
+            <Flag size={13} />
+            <span>Report scam / incorrect details</span>
+          </button>
+        </section>
       </main>
+
       <BottomNav />
-      {toast && <Toast {...toast} onClose={() => setToast(null)} />}
+      {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </div>
   );
 }

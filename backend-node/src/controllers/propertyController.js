@@ -29,6 +29,9 @@ async function getProperty(req, res, next) {
     const property = maskProperty({ ...raw }, req.isPropertyUnlocked, req.user);
     property.room_materials = parseJson(raw.room_materials);
     property.nearby_landmarks = parseJson(raw.nearby_landmarks);
+    if (property.nearby_landmarks && typeof property.nearby_landmarks === 'object' && !Array.isArray(property.nearby_landmarks)) {
+      Object.assign(property, property.nearby_landmarks);
+    }
     if (req.isPropertyUnlocked) {
       const [[coords]] = await db.query(
         'SELECT ST_Longitude(location) AS lng, ST_Latitude(location) AS lat FROM properties WHERE id = ?',

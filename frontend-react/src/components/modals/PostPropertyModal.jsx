@@ -40,6 +40,14 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
   const [furnishing, setFurnishing] = useState('Semi-furnished'); // 'Fully-furnished' | 'Semi-furnished' | 'Unfurnished'
   const [bathroom, setBathroom] = useState('Private'); // 'Private' | 'Common'
   const [kitchen, setKitchen] = useState('Private Modular'); // 'Private Modular' | 'Shared' | 'No Kitchen'
+  
+  // Extended Property Details (Matching Reference Details Video)
+  const [sizeSqft, setSizeSqft] = useState('450');
+  const [floorNumber, setFloorNumber] = useState('2nd floor');
+  const [totalFloors, setTotalFloors] = useState('4 floors');
+  const [roofType, setRoofType] = useState('RCC roof');
+  const [environment, setEnvironment] = useState('Well-connected residential area with nearby shops, transport and daily essentials');
+
   const [locality, setLocality] = useState('Rajpur Sonarpur');
   const [city, setCity] = useState('Kolkata');
   const [exactAddress, setExactAddress] = useState('');
@@ -53,6 +61,7 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
   // STEP 2: OWNER / BUILDER CONTACT DETAILS
   // ==========================================
   const [fullName, setFullName] = useState('');
+  const [ownerGender, setOwnerGender] = useState('Male'); // 'Male' | 'Female' | 'Other'
   const [phone, setPhone] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
   const [isWhatsappSame, setIsWhatsappSame] = useState(true);
@@ -65,6 +74,44 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
   const [rent, setRent] = useState('');
   const [deposit, setDeposit] = useState('');
   const [maintenance, setMaintenance] = useState('Included in Rent');
+
+  // Terms & Payment Details
+  const [contractDuration, setContractDuration] = useState('Minimum 6 months');
+  const [rentDue, setRentDue] = useState('Rent due by the 5th of every month');
+  const [missedRent, setMissedRent] = useState('Maximum 1 month can remain unpaid');
+
+  // Utilities & Policies
+  const [electricityCharge, setElectricityCharge] = useState('₹8/unit (as per sub-meter)');
+  const [waterSupply, setWaterSupply] = useState('Free — standard building water supply');
+  const [occupancy, setOccupancy] = useState('Private occupancy');
+  const [visitorsPolicy, setVisitorsPolicy] = useState('Visitors allowed subject to house/building rules');
+
+  // Furniture & Appliances Inventory
+  const ALL_FURNITURE_OPTIONS = [
+    'Bed',
+    'Table',
+    'Chair',
+    'Ceiling Fan',
+    'Lights / LED',
+    'Wardrobe',
+    'AC (Air Conditioner)',
+    'Geyser',
+    'Refrigerator (Fridge)',
+    'Washing Machine',
+    'TV',
+    'Modular Kitchen',
+    'WiFi Broadband',
+    'RO Water Purifier',
+  ];
+  const [furnitureItems, setFurnitureItems] = useState(['Bed', 'Table', 'Chair', 'Ceiling Fan', 'Lights / LED']);
+
+  const toggleFurniture = (item) => {
+    if (furnitureItems.includes(item)) {
+      setFurnitureItems(furnitureItems.filter((i) => i !== item));
+    } else {
+      setFurnitureItems([...furnitureItems, item]);
+    }
+  };
   
   // Rules
   const POPULAR_RULES = [
@@ -322,6 +369,10 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
   const validateStep1 = () => {
     const errs = {};
     if (!title.trim()) errs.title = 'Property Title is required.';
+    if (!sizeSqft || isNaN(Number(sizeSqft)) || Number(sizeSqft) < 20) {
+      errs.sizeSqft = 'Valid room size in sq ft is required (e.g. 450).';
+    }
+    if (!floorNumber.trim()) errs.floorNumber = 'Floor information is required.';
     if (!locality.trim()) errs.locality = 'Locality / Area is required.';
     
     // If exactAddress is empty, provide a default from locality/GPS or flag error
@@ -496,6 +547,33 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
       kitchen_type: kitchen,
       kitchen: kitchen.includes('No') ? "Don't need" : 'Need',
       
+      // Extended Property Overview
+      size_sqft: Number(sizeSqft) || 450,
+      roomSize: `${sizeSqft || 450} sq ft`,
+      floorNumber: floorNumber,
+      totalFloors: totalFloors,
+      floor: `${floorNumber} / ${totalFloors}`,
+      roof_floor_type: `${floorNumber} / ${totalFloors} · ${roofType}`,
+      roof: roofType,
+      environment: environment.trim() || 'Well-connected residential area with nearby shops, transport and daily essentials',
+
+      // Rooms & Facilities
+      electric: electricityCharge,
+      electricity_bill_included: electricityCharge.toLowerCase().includes('included'),
+      water: waterSupply,
+      water_bill_included: waterSupply.toLowerCase().includes('free') || waterSupply.toLowerCase().includes('included'),
+      furniture: furnitureItems.length > 0 ? furnitureItems.map((m) => `${m}: Yes`).join(' · ') : 'Unfurnished',
+      room_materials: furnitureItems,
+      roommate: occupancy,
+      visitors: visitorsPolicy,
+      allow_parents_friends: !visitorsPolicy.toLowerCase().includes('no visitors'),
+
+      // Rent & Payment Terms
+      contract: contractDuration,
+      contract_months: parseInt(contractDuration.replace(/\D/g, '')) || 6,
+      rentDue: rentDue,
+      missedRent: missedRent,
+
       // Location
       locality: locality.trim(),
       location: `${locality.trim()}, ${city.trim()}`,
@@ -507,8 +585,10 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
       gps_accuracy_meters: liveLocation?.accuracy || 15,
       gps_timestamp: liveLocation?.timestamp,
 
-      // Contact
+      // Contact & Owner Profile
       owner_name: fullName.trim(),
+      owner_gender: ownerGender,
+      ownerGender: ownerGender,
       owner_phone: phone.replace(/\D/g, ''),
       phone: phone.replace(/\D/g, ''),
       owner_whatsapp: whatsapp.replace(/\D/g, ''),
@@ -523,6 +603,25 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
       maintenance_charges: maintenance,
       rules_and_regulations: allCombinedRules.join('; '),
       rules: allCombinedRules,
+
+      // Extended Terms & Landmarks Payload for Backend JSON
+      nearby_landmarks: {
+        size_sqft: Number(sizeSqft) || 450,
+        roomSize: `${sizeSqft || 450} sq ft`,
+        floor: `${floorNumber} / ${totalFloors}`,
+        roof: roofType,
+        environment: environment.trim(),
+        owner_gender: ownerGender,
+        ownerGender: ownerGender,
+        contract: contractDuration,
+        rentDue: rentDue,
+        missedRent: missedRent,
+        electric: electricityCharge,
+        water: waterSupply,
+        roommate: occupancy,
+        visitors: visitorsPolicy,
+        furniture: furnitureItems.length > 0 ? furnitureItems.map((m) => `${m}: Yes`).join(' · ') : 'Unfurnished',
+      },
 
       // Media
       cover_url: finalAngle1,
@@ -901,12 +1000,102 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
                     </div>
                   </div>
 
-                  {/* 8. Live GPS Location (MANDATORY REQUIREMENT) */}
+                  {/* 8. Room Size, Floor Details & Roof Type */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div>
+                      <label className="block text-xs font-black text-[#17324D] mb-1">
+                        8. Room Size (sq ft): <span className="text-rose-600">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        min="50"
+                        value={sizeSqft}
+                        onChange={(e) => {
+                          setSizeSqft(e.target.value);
+                          setStepErrors((prev) => ({ ...prev, sizeSqft: '' }));
+                        }}
+                        placeholder="e.g. 450"
+                        className="w-full px-3 py-2 rounded-xl bg-white border border-[#d8cba9] text-xs font-bold text-[#17324D] outline-none focus:ring-2 focus:ring-[#FF9A1F]"
+                      />
+                      {stepErrors.sizeSqft && <p className="text-[10px] text-rose-600 font-bold mt-0.5">{stepErrors.sizeSqft}</p>}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-black text-[#17324D] mb-1">
+                        9. Floor: <span className="text-rose-600">*</span>
+                      </label>
+                      <select
+                        value={floorNumber}
+                        onChange={(e) => setFloorNumber(e.target.value)}
+                        className="w-full px-2.5 py-2 rounded-xl bg-white border border-[#d8cba9] text-xs font-bold text-[#17324D] outline-none"
+                      >
+                        <option value="Ground floor">Ground floor</option>
+                        <option value="1st floor">1st floor</option>
+                        <option value="2nd floor">2nd floor</option>
+                        <option value="3rd floor">3rd floor</option>
+                        <option value="4th floor">4th floor</option>
+                        <option value="5th floor">5th floor</option>
+                        <option value="Top floor">Top floor</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-black text-[#17324D] mb-1">
+                        10. Roof Type: <span className="text-rose-600">*</span>
+                      </label>
+                      <select
+                        value={roofType}
+                        onChange={(e) => setRoofType(e.target.value)}
+                        className="w-full px-2.5 py-2 rounded-xl bg-white border border-[#d8cba9] text-xs font-bold text-[#17324D] outline-none"
+                      >
+                        <option value="RCC roof">RCC Concrete Roof</option>
+                        <option value="Open Terrace">Open Terrace Access</option>
+                        <option value="Tiled Roof">Tiled / Slanted Roof</option>
+                        <option value="Tin Shed / Asbestos">Tin Shed / Semi-Pucca</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* 11. Total Building Floors & Environment */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div>
+                      <label className="block text-xs font-black text-[#17324D] mb-1">
+                        Total Building Floors:
+                      </label>
+                      <select
+                        value={totalFloors}
+                        onChange={(e) => setTotalFloors(e.target.value)}
+                        className="w-full px-2.5 py-2 rounded-xl bg-white border border-[#d8cba9] text-xs font-bold text-[#17324D] outline-none"
+                      >
+                        <option value="2 floors">G+1 (2 floors total)</option>
+                        <option value="3 floors">G+2 (3 floors total)</option>
+                        <option value="4 floors">G+3 (4 floors total)</option>
+                        <option value="5 floors">G+4 (5 floors total)</option>
+                        <option value="8 floors">G+7 (8 floors total)</option>
+                        <option value="10+ floors">High-Rise (10+ floors)</option>
+                      </select>
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-black text-[#17324D] mb-1">
+                        11. Neighborhood Environment: <span className="text-rose-600">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={environment}
+                        onChange={(e) => setEnvironment(e.target.value)}
+                        placeholder="e.g. Well-connected residential area with nearby shops, transport and daily essentials"
+                        className="w-full px-3 py-2 rounded-xl bg-white border border-[#d8cba9] text-xs font-bold text-[#17324D] outline-none focus:ring-2 focus:ring-[#FF9A1F]"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 12. Live GPS Location (MANDATORY REQUIREMENT) */}
                   <div className="p-3 rounded-2xl bg-gradient-to-r from-emerald-50 to-[#f4ebe0] border-2 border-emerald-300 space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5 font-black text-xs text-[#1f4d3f]">
                         <Navigation size={15} className="text-emerald-700 animate-pulse" />
-                        <span>8. Live Property Location (GPS Coordinates) <span className="text-rose-600">*</span></span>
+                        <span>12. Live Property Location (GPS Coordinates) <span className="text-rose-600">*</span></span>
                       </div>
                       {liveLocation ? (
                         <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black flex items-center gap-1 border border-emerald-300">
@@ -995,11 +1184,11 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
                     )}
                   </div>
 
-                  {/* 9. Locality & Exact Address */}
+                  {/* 13. Locality & 14. Exact Address */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     <div>
                       <label className="block text-xs font-black text-[#17324D] mb-1">
-                        9. Locality / Area: <span className="text-rose-600">*</span>
+                        13. Locality / Area: <span className="text-rose-600">*</span>
                       </label>
                       <input
                         type="text"
@@ -1016,7 +1205,7 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
 
                     <div>
                       <label className="block text-xs font-black text-[#17324D] mb-1">
-                        10. Exact Building / House Address: <span className="text-rose-600">*</span>
+                        14. Exact Building / House Address: <span className="text-rose-600">*</span>
                       </label>
                       <input
                         type="text"
@@ -1061,10 +1250,38 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
                     {stepErrors.fullName && <p className="text-[11px] text-rose-600 font-bold mt-1">{stepErrors.fullName}</p>}
                   </div>
 
-                  {/* 2. Primary Mobile Number */}
+                  {/* 2. Owner Gender (From Reference Video Section 7) */}
                   <div>
                     <label className="block text-xs font-black text-[#17324D] mb-1">
-                      2. Primary Contact Phone Number (+91): <span className="text-rose-600">*</span>
+                      2. Owner Gender: <span className="text-rose-600">*</span>
+                    </label>
+                    <div className="grid grid-cols-3 gap-2 bg-[#f4ebe0] p-1.5 rounded-2xl border border-[#e5dac4]">
+                      {[
+                        { label: 'Male', icon: '👨' },
+                        { label: 'Female', icon: '👩' },
+                        { label: 'Other', icon: '👤' },
+                      ].map((g) => (
+                        <button
+                          key={g.label}
+                          type="button"
+                          onClick={() => setOwnerGender(g.label)}
+                          className={`py-2 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                            ownerGender === g.label
+                              ? 'bg-[#1f4d3f] text-white shadow-sm'
+                              : 'text-[#17324D] hover:bg-white/50'
+                          }`}
+                        >
+                          <span>{g.icon}</span>
+                          <span>{g.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 3. Primary Mobile Number */}
+                  <div>
+                    <label className="block text-xs font-black text-[#17324D] mb-1">
+                      3. Primary Contact Phone Number (+91): <span className="text-rose-600">*</span>
                     </label>
                     <div className="relative flex items-center">
                       <div className="absolute left-3.5 flex items-center gap-1 text-slate-500 font-bold text-xs pointer-events-none">
@@ -1087,11 +1304,11 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
                     {stepErrors.phone && <p className="text-[11px] text-rose-600 font-bold mt-1">{stepErrors.phone}</p>}
                   </div>
 
-                  {/* 3. WhatsApp Number */}
+                  {/* 4. WhatsApp Number */}
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="block text-xs font-black text-[#17324D]">
-                        3. WhatsApp Number (+91): <span className="text-rose-600">*</span>
+                        4. WhatsApp Number (+91): <span className="text-rose-600">*</span>
                       </label>
                       <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer font-bold">
                         <input
@@ -1125,10 +1342,10 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
                     {stepErrors.whatsapp && <p className="text-[11px] text-rose-600 font-bold mt-1">{stepErrors.whatsapp}</p>}
                   </div>
 
-                  {/* 4. Email Address */}
+                  {/* 5. Email Address */}
                   <div>
                     <label className="block text-xs font-black text-[#17324D] mb-1">
-                      4. Official Email Address: <span className="text-rose-600">*</span>
+                      5. Official Email Address: <span className="text-rose-600">*</span>
                     </label>
                     <div className="relative">
                       <Mail className="absolute left-3.5 top-3 text-slate-400" size={16} />
@@ -1146,10 +1363,10 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
                     {stepErrors.email && <p className="text-[11px] text-rose-600 font-bold mt-1">{stepErrors.email}</p>}
                   </div>
 
-                  {/* 5. Alternate Mobile Number (MANDATORY REQUIREMENT) */}
+                  {/* 6. Alternate Mobile Number (MANDATORY REQUIREMENT) */}
                   <div>
                     <label className="block text-xs font-black text-[#17324D] mb-1">
-                      5. Alternate Mobile Number (+91): <span className="text-rose-600">*</span>
+                      6. Alternate Mobile Number (+91): <span className="text-rose-600">*</span>
                     </label>
                     <div className="relative flex items-center">
                       <div className="absolute left-3.5 flex items-center gap-1 text-slate-500 font-bold text-xs pointer-events-none">
@@ -1236,10 +1453,174 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
                     </div>
                   </div>
 
+                  {/* 💰 Rent & Payment Terms (From Reference Details Video) */}
+                  <div className="p-3.5 rounded-2xl bg-white border border-[#e5dac4] space-y-2.5">
+                    <span className="block font-black text-xs text-[#17324D]">
+                      💰 Rent &amp; Payment Terms
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          4. Minimum Stay / Contract:
+                        </label>
+                        <select
+                          value={contractDuration}
+                          onChange={(e) => setContractDuration(e.target.value)}
+                          className="w-full px-2.5 py-2 rounded-xl bg-slate-50 border border-[#d8cba9] text-xs font-bold text-[#17324D] outline-none"
+                        >
+                          <option value="Minimum 1 month">Minimum 1 month</option>
+                          <option value="Minimum 3 months">Minimum 3 months</option>
+                          <option value="Minimum 6 months">Minimum 6 months</option>
+                          <option value="Minimum 11 months">Minimum 11 months</option>
+                          <option value="No lock-in (Flexible)">No lock-in (Flexible)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          5. Rent Due Date:
+                        </label>
+                        <select
+                          value={rentDue}
+                          onChange={(e) => setRentDue(e.target.value)}
+                          className="w-full px-2.5 py-2 rounded-xl bg-slate-50 border border-[#d8cba9] text-xs font-bold text-[#17324D] outline-none"
+                        >
+                          <option value="Rent due by the 1st of every month">By 1st of every month</option>
+                          <option value="Rent due by the 5th of every month">By 5th of every month</option>
+                          <option value="Rent due by the 10th of every month">By 10th of every month</option>
+                          <option value="Rent due on completion of month cycle">Flexible month cycle</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          6. Missed Rent Grace Limit:
+                        </label>
+                        <select
+                          value={missedRent}
+                          onChange={(e) => setMissedRent(e.target.value)}
+                          className="w-full px-2.5 py-2 rounded-xl bg-slate-50 border border-[#d8cba9] text-xs font-bold text-[#17324D] outline-none"
+                        >
+                          <option value="Maximum 1 month can remain unpaid">Maximum 1 month</option>
+                          <option value="15 days grace period allowed">15 days grace period</option>
+                          <option value="Strictly within due date (0 unpaid days)">Strictly by due date</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ⚡ Utilities & Living Conditions (From Reference Video) */}
+                  <div className="p-3.5 rounded-2xl bg-white border border-[#e5dac4] space-y-2.5">
+                    <span className="block font-black text-xs text-[#17324D]">
+                      ⚡ Utilities &amp; Occupancy Policy
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          7. Electricity Charges:
+                        </label>
+                        <select
+                          value={electricityCharge}
+                          onChange={(e) => setElectricityCharge(e.target.value)}
+                          className="w-full px-2.5 py-2 rounded-xl bg-slate-50 border border-[#d8cba9] text-xs font-bold text-[#17324D] outline-none"
+                        >
+                          <option value="₹8/unit (as per sub-meter)">₹8/unit (as per sub-meter)</option>
+                          <option value="₹9/unit (as per sub-meter)">₹9/unit (as per sub-meter)</option>
+                          <option value="Included in monthly rent">Included in monthly rent</option>
+                          <option value="Govt tariff (CESC/WBSEDCL actual)">Govt actual tariff</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          8. Water Supply:
+                        </label>
+                        <select
+                          value={waterSupply}
+                          onChange={(e) => setWaterSupply(e.target.value)}
+                          className="w-full px-2.5 py-2 rounded-xl bg-slate-50 border border-[#d8cba9] text-xs font-bold text-[#17324D] outline-none"
+                        >
+                          <option value="Free — standard building water supply">Free — 24/7 building water</option>
+                          <option value="24/7 Deep Borewell & Corporation water">24/7 Deep Borewell &amp; Corp</option>
+                          <option value="Fixed ₹150/mo water charges">Fixed ₹150/mo water charges</option>
+                          <option value="Included in maintenance">Included in maintenance</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          9. Roommates / Occupancy:
+                        </label>
+                        <select
+                          value={occupancy}
+                          onChange={(e) => setOccupancy(e.target.value)}
+                          className="w-full px-2.5 py-2 rounded-xl bg-slate-50 border border-[#d8cba9] text-xs font-bold text-[#17324D] outline-none"
+                        >
+                          <option value="Private occupancy">Private occupancy</option>
+                          <option value="2 resident(s) allowed">2 resident(s) allowed</option>
+                          <option value="3 resident(s) allowed">3 resident(s) allowed</option>
+                          <option value="Family occupancy">Family occupancy</option>
+                          <option value="Bachelors / Students welcome">Bachelors / Students</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          10. Visitors Policy:
+                        </label>
+                        <select
+                          value={visitorsPolicy}
+                          onChange={(e) => setVisitorsPolicy(e.target.value)}
+                          className="w-full px-2.5 py-2 rounded-xl bg-slate-50 border border-[#d8cba9] text-xs font-bold text-[#17324D] outline-none"
+                        >
+                          <option value="Visitors allowed subject to house/building rules">Visitors allowed (Subject to rules)</option>
+                          <option value="Daytime visitors allowed till 9 PM">Daytime visitors allowed (till 9 PM)</option>
+                          <option value="Parents and friends freely allowed">Parents &amp; friends freely allowed</option>
+                          <option value="No outside visitors allowed">No outside visitors allowed</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 🛋️ Furniture & Appliances Inventory (From Reference Video) */}
+                  <div className="p-3.5 rounded-2xl bg-[#f4ebe0] border border-[#e5dac4] space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-black text-xs text-[#17324D]">
+                        🛋️ 11. Furniture &amp; Appliances Inventory Checklist
+                      </span>
+                      <span className="text-[10px] font-bold text-slate-500">
+                        {furnitureItems.length} items included
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      Select all furniture, fittings and appliances available in this property:
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {ALL_FURNITURE_OPTIONS.map((item) => {
+                        const isSelected = furnitureItems.includes(item);
+                        return (
+                          <button
+                            key={item}
+                            type="button"
+                            onClick={() => toggleFurniture(item)}
+                            className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                              isSelected
+                                ? 'bg-[#1f4d3f] text-white shadow-xs'
+                                : 'bg-white border border-[#d8cba9] text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            {isSelected ? <Check size={12} className="stroke-[3]" /> : <span>+</span>}
+                            <span>{item}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   {/* House Rules */}
                   <div>
                     <label className="block text-xs font-black text-[#17324D] mb-1.5">
-                      4. Property &amp; House Rules: <span className="text-rose-600">*</span>
+                      12. Property &amp; House Rules: <span className="text-rose-600">*</span>
                     </label>
                     <div className="flex flex-wrap gap-1.5">
                       {POPULAR_RULES.map((rule) => {
@@ -1271,12 +1652,12 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
                     {stepErrors.rules && <p className="text-[11px] text-rose-600 font-bold mt-1">{stepErrors.rules}</p>}
                   </div>
 
-                  {/* 5. Upload 3 Photos in 3 Different Angles (MANDATORY REQUIREMENT) */}
+                  {/* 13. Upload 3 Photos in 3 Different Angles (MANDATORY REQUIREMENT) */}
                   <div className="p-3.5 rounded-2xl bg-[#f4ebe0] border border-[#e5dac4] space-y-2.5">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 font-black text-xs text-[#17324D]">
                         <Camera size={16} className="text-[#FF9A1F]" />
-                        <span>5. Upload 3 Photos (3 Different Angles &amp; Sides) <span className="text-rose-600">*</span></span>
+                        <span>13. Upload 3 Photos (3 Different Angles &amp; Sides) <span className="text-rose-600">*</span></span>
                       </div>
                       <span className="text-[10px] font-black text-slate-500">All 3 Required</span>
                     </div>
@@ -1408,12 +1789,12 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
                     </div>
                   </div>
 
-                  {/* 6. Upload Room Full Video (Max 20MB MANDATORY REQUIREMENT) */}
+                  {/* 14. Upload Room Full Video (Max 20MB MANDATORY REQUIREMENT) */}
                   <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-50 to-[#f4ebe0] border-2 border-amber-300 space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 font-black text-xs text-[#17324D]">
                         <Video size={16} className="text-[#FF9A1F]" />
-                        <span>6. Upload Room Full Video Walkthrough <span className="text-rose-600">*</span></span>
+                        <span>14. Upload Room Full Video Walkthrough <span className="text-rose-600">*</span></span>
                       </div>
                       <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-black border border-amber-300">
                         Max 20 MB Limit
@@ -1482,12 +1863,12 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
                     {stepErrors.video && <p className="text-[11px] text-rose-600 font-bold">{stepErrors.video}</p>}
                   </div>
 
-                  {/* 7. Previous Month's Current/Electricity Bill (MOVED TO STEP 3 AS REQUESTED!) */}
+                  {/* 15. Previous Month's Current/Electricity Bill (MOVED TO STEP 3 AS REQUESTED!) */}
                   <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-50 to-[#f4ebe0] border-2 border-emerald-300 space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 font-black text-xs text-[#17324D]">
                         <Zap size={16} className="text-amber-600" />
-                        <span>7. Previous Month&apos;s Current Bill of this Home <span className="text-rose-600">*</span></span>
+                        <span>15. Previous Month&apos;s Current Bill of this Home <span className="text-rose-600">*</span></span>
                       </div>
                       <span className="text-[10px] font-bold text-slate-500">PDF, JPG, PNG (Max 5MB)</span>
                     </div>
@@ -1572,16 +1953,38 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
                         <span className="font-bold text-slate-700">₹{deposit} ({maintenance})</span>
                       </div>
                       <div>
+                        <span className="text-slate-500 block text-[10px] font-bold">Room Size &amp; Roof:</span>
+                        <span className="font-bold text-slate-700">{sizeSqft} sq ft • {floorNumber} ({roofType})</span>
+                      </div>
+                      <div>
                         <span className="text-slate-500 block text-[10px] font-bold">Furnishing &amp; Bath:</span>
                         <span className="font-bold text-slate-700">{furnishing} • {bathroom} Bath</span>
                       </div>
                       <div>
-                        <span className="text-slate-500 block text-[10px] font-bold">Owner / Lister Name:</span>
-                        <span className="font-bold text-slate-700">{fullName} ({phone})</span>
+                        <span className="text-slate-500 block text-[10px] font-bold">Payment &amp; Terms:</span>
+                        <span className="font-bold text-slate-700">{contractDuration} • Due: {rentDue}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[10px] font-bold">Utilities (Elec &amp; Water):</span>
+                        <span className="font-bold text-slate-700">{electricityCharge} • {waterSupply}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[10px] font-bold">Owner &amp; Gender:</span>
+                        <span className="font-bold text-slate-700">{fullName} ({ownerGender}) • {phone}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[10px] font-bold">Occupancy &amp; Visitors:</span>
+                        <span className="font-bold text-slate-700">{occupancy} • {visitorsPolicy}</span>
                       </div>
                       <div>
                         <span className="text-slate-500 block text-[10px] font-bold">Alternate Contact:</span>
                         <span className="font-bold text-slate-700">{alternatePhone}</span>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-slate-500 block text-[10px] font-bold">Furniture &amp; Appliances ({furnitureItems.length} items):</span>
+                        <span className="font-bold text-[#1f4d3f] text-[11px] block truncate">
+                          {furnitureItems.join(', ')}
+                        </span>
                       </div>
                       <div className="col-span-2">
                         <span className="text-slate-500 block text-[10px] font-bold">Live GPS &amp; Address:</span>

@@ -34,9 +34,31 @@ function RequireRole({ roles }) {
         openAuthModal?.('input', 'tenant', 'Please log in to continue.');
       }
     }, 120);
-    return <Navigate to="/" state={{ from: location }} replace />;
+
+    // If coming from property page, return to that property instead of bouncing to home
+    const isPropertyRoute = location.pathname.startsWith('/tenant/property/');
+    const propertyMatch = location.pathname.match(/^\/tenant\/property\/([^/]+)/);
+    const fallback = isPropertyRoute && propertyMatch ? `/tenant/property/${propertyMatch[1]}` : '/';
+
+    return <Navigate to={fallback} state={{ from: location }} replace />;
   }
-  if (!roles.includes(user.role)) return <Navigate to="/" replace />;
+
+  const userRole = (user.role || 'TENANT').toUpperCase();
+  const isAllowed = roles.some((r) => {
+    const target = r.toUpperCase();
+    if (userRole === target) return true;
+    if (target === 'TENANT' && (userRole.includes('TENANT') || userRole.includes('OWNER') || userRole.includes('BUILDER'))) return true;
+    if (target === 'OWNER' && (userRole.includes('OWNER') || userRole.includes('BUILDER'))) return true;
+    if (userRole === 'ADMIN') return true;
+    return false;
+  });
+
+  if (!isAllowed) {
+    const isPropertyRoute = location.pathname.startsWith('/tenant/property/');
+    const propertyMatch = location.pathname.match(/^\/tenant\/property\/([^/]+)/);
+    const fallback = isPropertyRoute && propertyMatch ? `/tenant/property/${propertyMatch[1]}` : '/';
+    return <Navigate to={fallback} replace />;
+  }
   return <Outlet />;
 }
 
@@ -78,10 +100,14 @@ export default function App() {
       <Route path="/role-selection" element={<Navigate to="/" replace />} />
       <Route path="/admin/login" element={<AdminLoginRedirect />} />
 
-      {/* Protected Tenant Routes */}
-      <Route element={<RequireRole roles={['TENANT']} />}>
+      {/* Checkout and Visit Booking: Accessible to any authenticated user (TENANT, OWNER, TENANT+OWNER, ADMIN) */}
+      <Route element={<RequireRole roles={['TENANT', 'OWNER', 'ADMIN', 'TENANT+OWNER', 'TENANT+BUILDER']} />}>
         <Route path="/tenant/property/:id/checkout" element={<PaymentCheckout />} />
         <Route path="/tenant/property/:id/visit" element={<VisitBooking />} />
+      </Route>
+
+      {/* Protected Tenant Routes */}
+      <Route element={<RequireRole roles={['TENANT']} />}>
         <Route path="/tenant/chats" element={<TenantChats />} />
         <Route path="/tenant/profile" element={<TenantProfile />} />
       </Route>

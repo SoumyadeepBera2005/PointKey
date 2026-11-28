@@ -47,7 +47,7 @@ export default function PropertyDetails() {
           let photos = [];
           try {
             photos = typeof prop.photos === 'string' ? JSON.parse(prop.photos) : (Array.isArray(prop.photos) ? prop.photos : []);
-          } catch {}
+          } catch { }
 
           try {
             const localProps = [
@@ -62,7 +62,7 @@ export default function PropertyDetails() {
               let matchedPhotos = [];
               try {
                 matchedPhotos = typeof matchedLocal.photos === 'string' ? JSON.parse(matchedLocal.photos) : (Array.isArray(matchedLocal.photos) ? matchedLocal.photos : []);
-              } catch {}
+              } catch { }
               if (matchedPhotos.length > 0 && photos.length === 0) {
                 photos = matchedPhotos;
               }
@@ -70,7 +70,7 @@ export default function PropertyDetails() {
                 prop.video_url = matchedLocal.video_url;
               }
             }
-          } catch {}
+          } catch { }
 
           if (photos.length > 0) {
             prop.media = photos.map((ph, idx) => ({
@@ -101,7 +101,7 @@ export default function PropertyDetails() {
             let photos = [];
             try {
               photos = typeof matched.photos === 'string' ? JSON.parse(matched.photos) : (Array.isArray(matched.photos) ? matched.photos : []);
-            } catch {}
+            } catch { }
             const mediaList = photos.map((ph, idx) => ({
               id: `angle-${idx + 1}`,
               room_tag: ph.label || `Angle ${idx + 1}`,
@@ -122,7 +122,7 @@ export default function PropertyDetails() {
             setUnlocked(isLocallyUnlocked);
             return;
           }
-        } catch {}
+        } catch { }
 
         // Fallback for sample properties so clicking cards from demo works
         const sample = SAMPLE_PROPERTIES.find((s) => String(s.id) === String(id));
@@ -221,9 +221,23 @@ export default function PropertyDetails() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  // Real-time synchronization: live status & details update without page refresh
+  // Real-time synchronization: live status & unlock update without page refresh
   useEffect(() => {
+    const handleUnlock = () => {
+      try {
+        const unlockedLocal = JSON.parse(localStorage.getItem('prent_unlocked_properties') || '[]');
+        if (unlockedLocal.includes(String(id))) {
+          setUnlocked(true);
+        }
+      } catch {}
+    };
+
+    window.addEventListener('prent_property_unlocked', handleUnlock);
+
     const unsubscribe = subscribeRealtime((event) => {
+      if (event?.type === 'PROPERTY_UNLOCKED' && String(event.payload?.property_id) === String(id)) {
+        setUnlocked(true);
+      }
       if (
         (event?.type === 'PROPERTY_STATUS' || event?.type === 'PROPERTY_SYNC') &&
         String(event.payload?.id) === String(id)
@@ -233,7 +247,10 @@ export default function PropertyDetails() {
         }
       }
     });
-    return () => unsubscribe();
+    return () => {
+      window.removeEventListener('prent_property_unlocked', handleUnlock);
+      unsubscribe();
+    };
   }, [id]);
 
   const submitRating = async (score) => {

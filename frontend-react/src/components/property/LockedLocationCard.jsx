@@ -4,11 +4,16 @@ import { useAuth } from '../../context/AuthContext';
 
 /** Shown pre-payment: masks exact pin + owner contact (spec §3-C State 1). */
 export default function LockedLocationCard({ propertyId }) {
-  const { user } = useAuth();
+  const { user, openAuthModal } = useAuth();
   const isSuspended = user?.account_status === 'SUSPENDED';
   const isBlocked = user?.account_status === 'BLOCKED';
 
   const handlePayClick = (e) => {
+    if (!user) {
+      e.preventDefault();
+      openAuthModal?.('input', 'tenant', 'Please log in to pay and unlock property details.');
+      return;
+    }
     if (isSuspended) {
       e.preventDefault();
       alert('⚠️ Payment disabled: Your account is suspended (Strike 1). Open the NestAI chatbot to submit an unblock appeal.');

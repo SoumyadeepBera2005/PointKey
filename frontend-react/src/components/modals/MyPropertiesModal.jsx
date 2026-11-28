@@ -82,12 +82,13 @@ function getSafePhotos(rawPhotos) {
     'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=600&q=80',
   ];
   return list.map((item, idx) => {
-    let url = typeof item === 'string' ? item : (item?.url || item?.preview || '');
-    if (!url || url.startsWith('blob:') || url.includes('hero-slide-1.jpg')) {
+    let url = typeof item === 'string' ? item : (item?.url || item?.preview || item?.dataUrl || '');
+    if (!url || url.includes('hero-slide-1.jpg')) {
       url = ROOM_FALLBACKS[idx % 3];
     }
     return {
       url,
+      preview: item?.preview || item?.dataUrl || url,
       label: (typeof item === 'object' && item?.label) ? item.label : `Angle ${idx + 1}`,
     };
   }).filter((p) => typeof p.url === 'string' && p.url.trim().length > 0);

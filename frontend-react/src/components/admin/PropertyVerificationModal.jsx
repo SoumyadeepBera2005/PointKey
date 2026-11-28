@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   X, 
   MapPin, 
@@ -16,9 +16,13 @@ import {
   Check,
   Maximize2,
   Play,
+  Pause,
+  RotateCcw,
+  Sparkles,
   Download
 } from 'lucide-react';
 import { formatINR } from '../../utils/currencyFormatter';
+import { getMediaBlobUrl } from '../../utils/mediaStorage';
 
 const DEFAULT_ANGLES = [
   'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=1200&q=80',
@@ -26,7 +30,6 @@ const DEFAULT_ANGLES = [
   'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=1200&q=80',
 ];
 
-const SAMPLE_WALKTHROUGH_VIDEO = '/assets/video/property-video-1.mp4';
 const SAMPLE_BILL_PREVIEW = '/assets/images/electric-bill-sample.png';
 
 export default function PropertyVerificationModal({ property, isOpen, onClose, onUpdateStatus }) {
@@ -35,6 +38,52 @@ export default function PropertyVerificationModal({ property, isOpen, onClose, o
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [videoPlayError, setVideoPlayError] = useState(false);
+  const [localVideoUrl, setLocalVideoUrl] = useState(null);
+  const [localBillUrl, setLocalBillUrl] = useState(null);
+  const [tourAngleIdx, setTourAngleIdx] = useState(0);
+  const [isTourPlaying, setIsTourPlaying] = useState(true);
+  const [viewMode, setViewMode] = useState('REAL_VIDEO'); // 'REAL_VIDEO' | 'AUTOMATED_TOUR'
+
+  // Retrieve persistent large media from IndexedDB if stored client-side
+  useEffect(() => {
+    let active = true;
+    async function loadIndexedDbMedia() {
+      if (!property) return;
+      try {
+        if (property.id) {
+          const vUrl = await getMediaBlobUrl(`video_${property.id}`);
+          if (vUrl && active) setLocalVideoUrl(vUrl);
+          const bUrl = await getMediaBlobUrl(`bill_${property.id}`);
+          if (bUrl && active) setLocalBillUrl(bUrl);
+        }
+        if (property.property_code) {
+          if (!localVideoUrl) {
+            const vUrl2 = await getMediaBlobUrl(`video_${property.property_code}`);
+            if (vUrl2 && active) setLocalVideoUrl(vUrl2);
+          }
+          if (!localBillUrl) {
+            const bUrl2 = await getMediaBlobUrl(`bill_${property.property_code}`);
+            if (bUrl2 && active) setLocalBillUrl(bUrl2);
+          }
+        }
+      } catch (err) {
+        console.warn('Could not load IndexedDB media:', err);
+      }
+    }
+    loadIndexedDbMedia();
+    return () => { active = false; };
+  }, [property?.id, property?.property_code]);
+
+  // Automated 3-angle walkthrough tour timer
+  useEffect(() => {
+    let interval = null;
+    if (isTourPlaying) {
+      interval = setInterval(() => {
+        setTourAngleIdx((prev) => (prev + 1) % 3);
+      }, 3000);
+    }
+    return () => { if (interval) clearInterval(interval); };
+  }, [isTourPlaying]);
 
   if (!isOpen || !property) return null;
 
@@ -47,32 +96,32 @@ export default function PropertyVerificationModal({ property, isOpen, onClose, o
     rawPhotos = [{ label: 'Front Entrance (Angle 1)', url: property.cover_url }];
   }
 
-  // Ensure 3 angles exist and filter out dead blob: URLs or placeholder images
+  // Ensure 3 angles exist without stripping user uploaded photos
   const safePhotos = [0, 1, 2].map((idx) => {
     const p = rawPhotos[idx];
     const defaultLabel = idx === 0 ? 'Angle 1 (Front/Entrance)' : idx === 1 ? 'Angle 2 (Living/Bedroom)' : 'Angle 3 (Balcony/Kitchen/Side)';
-    let url = p?.url || p?.preview || '';
-    if (!url || url.startsWith('blob:') || url.includes('hero-slide-1.jpg')) {
+    let url = p?.url || p?.preview || p?.dataUrl || (idx === 0 ? property.cover_url : '');
+    if (!url || url.includes('hero-slide-1.jpg')) {
       url = DEFAULT_ANGLES[idx];
     }
     return {
       url,
+      preview: p?.preview || p?.dataUrl || url,
       label: p?.label || defaultLabel,
       name: p?.name || `photo_angle_${idx + 1}.jpg`
     };
   });
 
-  // Safe electricity bill URL
-  let billUrl = property.electricity_bill_url;
-  if (!billUrl || billUrl.startsWith('blob:') || billUrl.includes('undefined')) {
+  // Safe electricity bill URL (prioritizes local indexedDB, then property dataUrl/remote url)
+  let billUrl = localBillUrl || property.electricity_bill_url || property.electricity_bill_preview;
+  if (!billUrl || billUrl.includes('undefined')) {
     billUrl = SAMPLE_BILL_PREVIEW;
   }
 
   // Safe video URL
-  let videoSrc = property.video_url;
-  if (!videoSrc || videoSrc.startsWith('blob:') || videoPlayError) {
-    videoSrc = SAMPLE_WALKTHROUGH_VIDEO;
-  }
+  let videoSrc = localVideoUrl || property.video_url || property.video_preview || '';
+  const hasRealPlayableVideo = Boolean(videoSrc) && !videoPlayError;
+
 
   const status = String(property.verification_status || (property.verified ? 'VERIFIED' : 'PENDING')).toUpperCase();
 
@@ -202,7 +251,13 @@ export default function PropertyVerificationModal({ property, isOpen, onClose, o
                     src={ph.url} 
                     alt={ph.label} 
                     className="w-full h-36 object-cover group-hover:scale-105 transition duration-200"
-                    onError={(e) => { e.currentTarget.src = DEFAULT_ANGLES[idx % 3]; }}
+                    onError={(e) => { 
+                      if (ph.preview && e.currentTarget.src !== ph.preview) {
+                        e.currentTarget.src = ph.preview;
+                      } else {
+                        e.currentTarget.src = DEFAULT_ANGLES[idx % 3]; 
+                      }
+                    }}
                   />
                   <div className="p-2 bg-white border-t border-slate-100 flex items-center justify-between">
                     <span className="text-[10px] font-black text-slate-700 truncate">{ph.label}</span>
@@ -215,39 +270,99 @@ export default function PropertyVerificationModal({ property, isOpen, onClose, o
 
           {/* Video & Electricity Bill Verification Section */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Real Walkthrough Video Player */}
+            {/* Real Walkthrough Video Player / Automated Tour */}
             <div className="p-3.5 bg-white rounded-2xl border border-sky-200 bg-sky-50/20 space-y-2 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between">
                   <span className="font-black text-sky-950 flex items-center gap-1.5 text-xs">
                     <Video size={14} className="text-sky-600" />
-                    <span>Real Walkthrough Video</span>
+                    <span>{viewMode === 'REAL_VIDEO' && hasRealPlayableVideo ? 'Real Walkthrough Video' : 'Automated Walkthrough Tour'}</span>
                   </span>
-                  <span className="px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 text-[9px] font-black uppercase">
-                    🔒 Admin Only
-                  </span>
+                  <div className="flex items-center gap-1">
+                    {hasRealPlayableVideo && (
+                      <button
+                        type="button"
+                        onClick={() => setViewMode(viewMode === 'REAL_VIDEO' ? 'AUTOMATED_TOUR' : 'REAL_VIDEO')}
+                        className="px-2 py-0.5 rounded-full bg-sky-100 hover:bg-sky-200 text-sky-800 text-[9px] font-bold border border-sky-300 transition cursor-pointer"
+                      >
+                        {viewMode === 'REAL_VIDEO' ? '🎬 3-Angle Tour' : '📹 Real Video'}
+                      </button>
+                    )}
+                    <span className="px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 text-[9px] font-black uppercase">
+                      🔒 Admin Only
+                    </span>
+                  </div>
                 </div>
                 <p className="text-[11px] text-slate-600 mt-1">
-                  Owner walkthrough video ({property.video_size_mb || '20'} MB). Hidden from public tenants; automated video tour is generated for tenants.
+                  {viewMode === 'REAL_VIDEO' && hasRealPlayableVideo
+                    ? `Owner walkthrough video (${property.video_size_mb || '20'} MB). Hidden from public tenants.`
+                    : "Automated virtual walkthrough generated directly from owner's 3 verified site photos."}
                 </p>
 
-                {/* Video Player */}
-                <div className="rounded-xl overflow-hidden border border-sky-300 mt-2 bg-black relative">
-                  <video 
-                    key={videoSrc}
-                    src={videoSrc} 
-                    controls 
-                    preload="auto"
-                    playsInline
-                    className="w-full max-h-48 object-cover" 
-                    onError={() => setVideoPlayError(true)}
-                  />
-                </div>
+                {/* Video Player or Automated Photo Walkthrough Tour */}
+                {viewMode === 'REAL_VIDEO' && hasRealPlayableVideo ? (
+                  <div className="rounded-xl overflow-hidden border border-sky-300 mt-2 bg-black relative">
+                    <video 
+                      key={videoSrc}
+                      src={videoSrc} 
+                      controls 
+                      preload="auto"
+                      playsInline
+                      className="w-full max-h-48 object-cover" 
+                      onError={() => {
+                        setVideoPlayError(true);
+                        setViewMode('AUTOMATED_TOUR');
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="rounded-xl overflow-hidden border border-sky-300 mt-2 bg-slate-900 relative h-48 flex items-center justify-center group">
+                    <img 
+                      src={safePhotos[tourAngleIdx].url} 
+                      alt={safePhotos[tourAngleIdx].label} 
+                      className="w-full h-full object-cover transition-all duration-700 ease-in-out"
+                      onError={(e) => { e.currentTarget.src = DEFAULT_ANGLES[tourAngleIdx % 3]; }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 pointer-events-none" />
+                    
+                    {/* Tour Badge */}
+                    <div className="absolute top-2 left-2 flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-sm text-amber-300 text-[10px] font-black border border-amber-400/40">
+                      <Sparkles size={11} className="text-amber-400 animate-spin" />
+                      <span>Automated Tour · 3 Angles</span>
+                    </div>
+
+                    {/* Controls & Active Step Overlay */}
+                    <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
+                      <div className="bg-black/75 px-2.5 py-1 rounded-md text-white text-[10px] font-bold border border-white/20">
+                        {safePhotos[tourAngleIdx].label}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button 
+                          type="button" 
+                          onClick={() => setIsTourPlaying(!isTourPlaying)}
+                          className="w-6 h-6 rounded-full bg-white/90 text-slate-800 flex items-center justify-center cursor-pointer shadow hover:bg-white transition"
+                        >
+                          {isTourPlaying ? <Pause size={11} /> : <Play size={11} />}
+                        </button>
+                        <div className="flex items-center gap-1 bg-black/70 px-2 py-1 rounded-full border border-white/20">
+                          {[0, 1, 2].map((idx) => (
+                            <button
+                              type="button" 
+                              key={idx} 
+                              onClick={() => { setTourAngleIdx(idx); setIsTourPlaying(false); }} 
+                              className={`w-2 h-2 rounded-full transition cursor-pointer ${tourAngleIdx === idx ? 'bg-amber-400 scale-125' : 'bg-white/40'}`} 
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="pt-2 flex items-center justify-between text-[10px] text-slate-500 font-bold border-t border-sky-100 mt-2">
-                <span>File: {property.video_name || 'Walkthrough_Room_Tour.mp4'}</span>
-                <span className="text-emerald-700">✓ Video Ready</span>
+                <span>File: {property.video_name || (hasRealPlayableVideo ? 'Walkthrough_Room_Tour.mp4' : '3-Angle_Automated_Tour')}</span>
+                <span className="text-emerald-700">✓ Video Tour Ready</span>
               </div>
             </div>
 

@@ -23,6 +23,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import { publishRealtime } from '../../services/realtimeSync';
+import { compressImageToDataUrl, storeMediaBlob } from '../../utils/mediaStorage';
 
 export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
   const { user, refreshUser } = useAuth();
@@ -285,8 +286,8 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
   const handleBillUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      setStepErrors((prev) => ({ ...prev, electricityBill: 'Current bill exceeds 10MB limit. Please upload under 10MB.' }));
+    if (file.size > 15 * 1024 * 1024) {
+      setStepErrors((prev) => ({ ...prev, electricityBill: 'Current bill exceeds 15MB limit. Please upload under 15MB.' }));
       return;
     }
     const sizeKb = Math.round(file.size / 1024);
@@ -294,8 +295,9 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
     setBillFileName(file.name);
     setBillFileSize(sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`);
     
-    // Read as persistent Base64
-    const dataUrl = await readFileAsDataUrl(file);
+    // Read and compress into persistent Base64 Data URL (~80KB - 130KB)
+    // Works reliably on both Vercel and Localhost without 404s
+    const dataUrl = await compressImageToDataUrl(file, 1200, 0.82);
     setBillPreview(dataUrl);
     setStepErrors((prev) => ({ ...prev, electricityBill: '' }));
   };
@@ -307,8 +309,8 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
       setStepErrors((prev) => ({ ...prev, [angleKey]: 'Please upload an image file (JPG, PNG, WebP).' }));
       return;
     }
-    if (file.size > 15 * 1024 * 1024) {
-      setStepErrors((prev) => ({ ...prev, [angleKey]: 'Photo file exceeds 15MB limit.' }));
+    if (file.size > 20 * 1024 * 1024) {
+      setStepErrors((prev) => ({ ...prev, [angleKey]: 'Photo file exceeds 20MB limit.' }));
       return;
     }
 
@@ -319,9 +321,9 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
     else if (angleKey === 'photoAngle2') setPhotoAngle2(initialData);
     else if (angleKey === 'photoAngle3') setPhotoAngle3(initialData);
 
-    // Read as persistent Base64 Data URL so images never expire on refresh
-    const dataUrl = await readFileAsDataUrl(file);
-    const persistentData = { file, preview: dataUrl || blobUrl, url: dataUrl || blobUrl, name: file.name };
+    // Compress to persistent ~80KB-120KB Base64 Data URL so images display everywhere (Vercel + Localhost)
+    const dataUrl = await compressImageToDataUrl(file, 1200, 0.82);
+    const persistentData = { file, preview: dataUrl || blobUrl, url: dataUrl || blobUrl, dataUrl: dataUrl || blobUrl, name: file.name };
     if (angleKey === 'photoAngle1') setPhotoAngle1(persistentData);
     else if (angleKey === 'photoAngle2') setPhotoAngle2(persistentData);
     else if (angleKey === 'photoAngle3') setPhotoAngle3(persistentData);
@@ -525,15 +527,45 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
       console.warn('Backend file upload fallback:', uploadErr);
     }
 
-    const finalAngle1 = uploadedAngle1 || photoAngle1?.preview || photoAngle1?.url || 'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=1200&q=80';
-    const finalAngle2 = uploadedAngle2 || photoAngle2?.preview || photoAngle2?.url || 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=1200&q=80';
-    const finalAngle3 = uploadedAngle3 || photoAngle3?.preview || photoAngle3?.url || 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=1200&q=80';
-    const finalBill = uploadedBill || billPreview || '/assets/images/electric-bill-sample.png';
+    // Prioritize self-contained compressed Base64 Data URLs so images & bills work everywhere (Vercel & Localhost)
+    const finalAngle1 = (photoAngle1?.preview && photoAngle1.preview.startsWith('data:')) 
+      ? photoAngle1.preview 
+      : (uploadedAngle1 || photoAngle1?.preview || photoAngle1?.url || 'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=1200&q=80');
+    
+    const finalAngle2 = (photoAngle2?.preview && photoAngle2.preview.startsWith('data:')) 
+      ? photoAngle2.preview 
+      : (uploadedAngle2 || photoAngle2?.preview || photoAngle2?.url || 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=1200&q=80');
+    
+    const finalAngle3 = (photoAngle3?.preview && photoAngle3.preview.startsWith('data:')) 
+      ? photoAngle3.preview 
+      : (uploadedAngle3 || photoAngle3?.preview || photoAngle3?.url || 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=1200&q=80');
+    
+    const finalBill = (billPreview && billPreview.startsWith('data:')) 
+      ? billPreview 
+      : (uploadedBill || billPreview || '/assets/images/electric-bill-sample.png');
+    
     const finalVideo = uploadedVideo || videoFile?.preview || '/assets/video/property-video-1.mp4';
 
+    const tempPropId = `prop-pending-${Date.now()}`;
+    const generatedCode = `${category === 'pg' ? 'PG' : category === 'flat' ? 'F' : 'R'}${Math.floor(100 + Math.random() * 900)}`;
+
+    // Store video and bill into persistent browser IndexedDB
+    try {
+      if (videoFile?.file) {
+        await storeMediaBlob(`video_${tempPropId}`, videoFile.file);
+        await storeMediaBlob(`video_${generatedCode}`, videoFile.file);
+      }
+      if (electricityBill) {
+        await storeMediaBlob(`bill_${tempPropId}`, electricityBill);
+        await storeMediaBlob(`bill_${generatedCode}`, electricityBill);
+      }
+    } catch (idbErr) {
+      console.warn('IndexedDB storage note:', idbErr);
+    }
+
     const pendingProperty = {
-      id: `prop-pending-${Date.now()}`,
-      property_code: `${category === 'pg' ? 'PG' : category === 'flat' ? 'F' : 'R'}${Math.floor(100 + Math.random() * 900)}`,
+      id: tempPropId,
+      property_code: generatedCode,
       title: title.trim(),
       category: category === 'flat' ? 'FLAT' : category === 'pg' ? 'PG' : 'ROOM',
       sub_type: subtype,
@@ -627,16 +659,18 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
       cover_url: finalAngle1,
       image: finalAngle1,
       photos: [
-        { label: 'Angle 1 (Front/Entrance)', name: photoAngle1?.name || 'angle_1.jpg', url: finalAngle1 },
-        { label: 'Angle 2 (Living/Bedroom)', name: photoAngle2?.name || 'angle_2.jpg', url: finalAngle2 },
-        { label: 'Angle 3 (Balcony/Kitchen/Side)', name: photoAngle3?.name || 'angle_3.jpg', url: finalAngle3 },
+        { label: 'Angle 1 (Front/Entrance)', name: photoAngle1?.name || 'angle_1.jpg', url: finalAngle1, preview: finalAngle1, dataUrl: finalAngle1 },
+        { label: 'Angle 2 (Living/Bedroom)', name: photoAngle2?.name || 'angle_2.jpg', url: finalAngle2, preview: finalAngle2, dataUrl: finalAngle2 },
+        { label: 'Angle 3 (Balcony/Kitchen/Side)', name: photoAngle3?.name || 'angle_3.jpg', url: finalAngle3, preview: finalAngle3, dataUrl: finalAngle3 },
       ],
       video_name: videoFile?.name || 'Walkthrough_Tour.mp4',
       video_size_mb: videoFile?.sizeMB || '20',
       video_url: finalVideo,
+      video_preview: videoFile?.preview || finalVideo,
       electricity_bill_uploaded: true,
       electricity_bill_name: billFileName || 'Current_Bill.png',
       electricity_bill_url: finalBill,
+      electricity_bill_preview: finalBill,
 
       // Status
       verification_status: 'PENDING',
@@ -657,7 +691,7 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
           ...pendingProperty,
           ...res.data.property,
           id: res.data.property.id,
-          property_code: res.data.property.property_code,
+          property_code: res.data.property.property_code || pendingProperty.property_code,
           location: typeof res.data.property.location === 'string' && res.data.property.location
             ? res.data.property.location
             : pendingProperty.location,
@@ -665,6 +699,19 @@ export default function PostPropertyModal({ isOpen, onClose, onSuccess }) {
             ? res.data.property.photos
             : pendingProperty.photos,
         };
+        // Also associate media with the newly created backend id
+        if (videoFile?.file) {
+          storeMediaBlob(`video_${res.data.property.id}`, videoFile.file);
+          if (res.data.property.property_code) {
+            storeMediaBlob(`video_${res.data.property.property_code}`, videoFile.file);
+          }
+        }
+        if (electricityBill) {
+          storeMediaBlob(`bill_${res.data.property.id}`, electricityBill);
+          if (res.data.property.property_code) {
+            storeMediaBlob(`bill_${res.data.property.property_code}`, electricityBill);
+          }
+        }
       }
       if (res.data?.token) {
         localStorage.setItem('prent_token', res.data.token);

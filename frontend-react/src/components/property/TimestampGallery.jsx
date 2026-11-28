@@ -14,6 +14,7 @@ import {
   Film
 } from 'lucide-react';
 import { formatDate } from '../../utils/dateTimestampHelper';
+import { getMediaBlobUrl } from '../../utils/mediaStorage';
 
 const ROOM_ANGLE_FALLBACKS = [
   'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=1200',
@@ -35,18 +36,42 @@ export default function TimestampGallery({ media = [], videoUrl = null, property
   const [isPlaying, setIsPlaying] = useState(true);
   const [tourTimeSec, setTourTimeSec] = useState(0);
   const [showRealVideo, setShowRealVideo] = useState(false);
+  const [localVideoUrl, setLocalVideoUrl] = useState(null);
   const galleryContainerRef = useRef(null);
 
-  // Normalize media items with owner's uploaded photos
+  // Retrieve persistent video blob from IndexedDB if stored client-side
+  useEffect(() => {
+    let activeEffect = true;
+    async function loadVideo() {
+      if (!property) return;
+      try {
+        if (property.id) {
+          const vUrl = await getMediaBlobUrl(`video_${property.id}`);
+          if (vUrl && activeEffect) setLocalVideoUrl(vUrl);
+        }
+        if (property.property_code && !localVideoUrl) {
+          const vUrl2 = await getMediaBlobUrl(`video_${property.property_code}`);
+          if (vUrl2 && activeEffect) setLocalVideoUrl(vUrl2);
+        }
+      } catch (err) {
+        console.warn('TimestampGallery video load:', err);
+      }
+    }
+    loadVideo();
+    return () => { activeEffect = false; };
+  }, [property?.id, property?.property_code]);
+
+  // Normalize media items with owner's uploaded photos (retaining dataUrls and blobUrls)
   const items = (Array.isArray(media) && media.length > 0)
     ? media.map((m, idx) => {
-        let u = m.media_url || m.url || '';
-        if (!u || u.startsWith('blob:') || u.includes('hero-slide-1.jpg')) {
+        let u = m.media_url || m.url || m.preview || m.dataUrl || '';
+        if (!u || u.includes('hero-slide-1.jpg')) {
           u = ROOM_ANGLE_FALLBACKS[idx % 3];
         }
         return {
           ...m,
           media_url: u,
+          preview: m.preview || m.dataUrl || u,
           room_tag: m.room_tag || m.label || `Angle ${idx + 1}`,
           chapterTitle: m.room_tag || m.label || (idx === 0 ? 'Front Entrance' : idx === 1 ? 'Living / Bedroom' : 'Balcony / Kitchen'),
         };
@@ -124,7 +149,8 @@ export default function TimestampGallery({ media = [], videoUrl = null, property
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  const safeVideoUrl = videoUrl && !videoUrl.startsWith('blob:') ? videoUrl : DEFAULT_SAMPLE_VIDEO;
+  const safeVideoUrl = localVideoUrl || (videoUrl ? videoUrl : DEFAULT_SAMPLE_VIDEO);
+  const hasPlayableVideo = Boolean(localVideoUrl || videoUrl);
 
   return (
     <div ref={galleryContainerRef} className="select-none">
@@ -142,7 +168,7 @@ export default function TimestampGallery({ media = [], videoUrl = null, property
 
         {/* Action Buttons: Automated Video Tour & Real Video */}
         <div className="flex items-center gap-1.5">
-          {videoUrl && (
+          {hasPlayableVideo && (
             <button
               type="button"
               onClick={() => {
@@ -208,7 +234,11 @@ export default function TimestampGallery({ media = [], videoUrl = null, property
                     : 'opacity-0 scale-95 pointer-events-none'
                 }`}
                 onError={(e) => {
-                  e.currentTarget.src = ROOM_ANGLE_FALLBACKS[idx % 3];
+                  if (m.preview && e.currentTarget.src !== m.preview) {
+                    e.currentTarget.src = m.preview;
+                  } else {
+                    e.currentTarget.src = ROOM_ANGLE_FALLBACKS[idx % 3];
+                  }
                 }}
               />
             ))}

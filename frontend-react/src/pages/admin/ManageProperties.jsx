@@ -49,24 +49,25 @@ const sanitizePropMedia = (p) => {
   const cleanPhotos = [0, 1, 2].map((idx) => {
     const existing = photos[idx];
     const defaultLabel = idx === 0 ? 'Angle 1 (Front/Entrance)' : idx === 1 ? 'Angle 2 (Living/Bedroom)' : 'Angle 3 (Balcony/Kitchen/Side)';
-    let u = existing?.url || existing?.preview || (idx === 0 ? p.cover_url : '');
-    if (!u || u.startsWith('blob:') || u.includes('hero-slide-1.jpg')) {
+    let u = existing?.url || existing?.preview || existing?.dataUrl || (idx === 0 ? p.cover_url : '');
+    if (!u || u.includes('hero-slide-1.jpg')) {
       u = DEFAULT_ROOM_ANGLES[idx];
     }
     return {
       label: existing?.label || defaultLabel,
       name: existing?.name || `photo_angle_${idx + 1}.jpg`,
       url: u,
+      preview: existing?.preview || existing?.dataUrl || u,
     };
   });
 
-  let billUrl = p.electricity_bill_url;
-  if (!billUrl || billUrl.startsWith('blob:')) {
+  let billUrl = p.electricity_bill_url || p.electricity_bill_preview;
+  if (!billUrl) {
     billUrl = DEFAULT_BILL_FILE;
   }
 
-  let videoUrl = p.video_url;
-  if (!videoUrl || videoUrl.startsWith('blob:')) {
+  let videoUrl = p.video_url || p.video_preview;
+  if (!videoUrl) {
     videoUrl = DEFAULT_WALKTHROUGH_VIDEO;
   }
 
@@ -601,7 +602,13 @@ export default function ManageProperties() {
                               src={ph.url || DEFAULT_ROOM_ANGLES[idx % 3]}
                               alt="Site Angle"
                               className="w-8 h-8 rounded-lg object-cover border border-slate-200"
-                              onError={(e) => { e.currentTarget.src = DEFAULT_ROOM_ANGLES[idx % 3]; }}
+                              onError={(e) => { 
+                                if (ph.preview && e.currentTarget.src !== ph.preview) {
+                                  e.currentTarget.src = ph.preview;
+                                } else {
+                                  e.currentTarget.src = DEFAULT_ROOM_ANGLES[idx % 3]; 
+                                }
+                              }}
                             />
                           ))}
                         </div>

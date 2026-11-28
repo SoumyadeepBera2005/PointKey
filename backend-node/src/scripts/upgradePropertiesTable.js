@@ -42,6 +42,12 @@ async function upgrade() {
       await db.query('ALTER TABLE properties ADD COLUMN alternate_phone VARCHAR(20) NULL');
     }
 
+    // Ensure media columns can hold large Data URLs without truncation
+    try { await db.query('ALTER TABLE properties MODIFY COLUMN cover_url LONGTEXT NULL'); } catch {}
+    try { await db.query('ALTER TABLE properties MODIFY COLUMN video_url LONGTEXT NULL'); } catch {}
+    try { await db.query('ALTER TABLE properties MODIFY COLUMN electricity_bill_url LONGTEXT NULL'); } catch {}
+    try { await db.query('ALTER TABLE property_media MODIFY COLUMN media_url LONGTEXT NOT NULL'); } catch {}
+
     console.log('✅ properties table successfully upgraded with all columns!');
     process.exit(0);
   } catch (err) {

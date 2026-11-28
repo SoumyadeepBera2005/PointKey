@@ -10,6 +10,7 @@ import PropertyVerificationModal from '../../components/admin/PropertyVerificati
 import { formatINR } from '../../utils/currencyFormatter';
 import api from '../../services/api';
 import { publishRealtime, subscribeRealtime } from '../../services/realtimeSync';
+import { resolveMediaUrl } from '../../utils/mediaStorage';
 
 const DEFAULT_ROOM_ANGLES = [
   'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80',
@@ -29,7 +30,8 @@ const sanitizePropMedia = (p) => {
   const cleanPhotos = [0, 1, 2].map((idx) => {
     const existing = photos[idx];
     const defaultLabel = idx === 0 ? 'Angle 1 (Front/Entrance)' : idx === 1 ? 'Angle 2 (Living/Bedroom)' : 'Angle 3 (Balcony/Kitchen/Side)';
-    let u = existing?.url || existing?.preview || existing?.dataUrl || (idx === 0 ? p.cover_url : '');
+    let rawU = existing?.url || existing?.preview || existing?.dataUrl || (idx === 0 ? p.cover_url : '');
+    let u = resolveMediaUrl(rawU);
     if (!u || u.includes('hero-slide-1.jpg')) {
       u = DEFAULT_ROOM_ANGLES[idx];
     }
@@ -37,16 +39,16 @@ const sanitizePropMedia = (p) => {
       label: existing?.label || defaultLabel,
       name: existing?.name || `photo_angle_${idx + 1}.jpg`,
       url: u,
-      preview: existing?.preview || existing?.dataUrl || u,
+      preview: resolveMediaUrl(existing?.preview || existing?.dataUrl || u),
     };
   });
 
-  let billUrl = p.electricity_bill_url || p.electricity_bill_preview;
+  let billUrl = resolveMediaUrl(p.electricity_bill_url || p.electricity_bill_preview);
   if (!billUrl) {
     billUrl = DEFAULT_BILL_FILE;
   }
 
-  let videoUrl = p.video_url || p.video_preview;
+  let videoUrl = resolveMediaUrl(p.video_url || p.video_preview);
   if (!videoUrl) {
     videoUrl = DEFAULT_WALKTHROUGH_VIDEO;
   }
@@ -371,13 +373,14 @@ export default function AdminDashboard() {
 
                     const displayPhotos = [0, 1, 2].map((i) => {
                       const ph = propPhotos[i];
-                      let url = ph?.url || ph?.preview || ph?.dataUrl || '';
+                      let rawUrl = ph?.url || ph?.preview || ph?.dataUrl || '';
+                      let url = resolveMediaUrl(rawUrl);
                       if (!url || url.includes('hero-slide-1.jpg')) {
                         url = DEFAULT_ROOM_ANGLES[i];
                       }
                       return {
                         url,
-                        preview: ph?.preview || ph?.dataUrl || url,
+                        preview: resolveMediaUrl(ph?.preview || ph?.dataUrl || url),
                         label: ph?.label || `Angle ${i + 1}`,
                       };
                     });

@@ -153,3 +153,47 @@ export async function getPropertyBillUrl(prop) {
   return prop.electricity_bill_url || prop.electricity_bill_preview || null;
 }
 
+/**
+ * Returns the backend API base origin (e.g. Render backend URL on Vercel)
+ */
+export function getBackendBaseUrl() {
+  const apiUrl = import.meta.env.VITE_API_URL;
+  if (apiUrl && typeof apiUrl === 'string' && apiUrl.startsWith('http')) {
+    try {
+      const u = new URL(apiUrl);
+      return u.origin;
+    } catch {}
+  }
+  const socketUrl = import.meta.env.VITE_SOCKET_URL;
+  if (socketUrl && typeof socketUrl === 'string' && socketUrl.startsWith('http')) {
+    try {
+      const u = new URL(socketUrl);
+      return u.origin;
+    } catch {}
+  }
+  if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
+    return 'https://pointkey-backend.onrender.com';
+  }
+  return '';
+}
+
+/**
+ * Resolves any relative media URL (like /uploads/xxx.jpg) to the absolute backend URL
+ * Prevents 404s and unwanted fallbacks on Vercel
+ */
+export function resolveMediaUrl(url) {
+  if (!url || typeof url !== 'string') return '';
+  const trimmed = url.trim();
+  if (trimmed.startsWith('data:') || trimmed.startsWith('blob:') || trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed;
+  }
+  if (trimmed.startsWith('/uploads/') || trimmed.startsWith('uploads/')) {
+    const cleanPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+    const base = getBackendBaseUrl();
+    if (base) return `${base}${cleanPath}`;
+    return cleanPath;
+  }
+  return trimmed;
+}
+
+

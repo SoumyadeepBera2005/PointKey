@@ -14,7 +14,7 @@ import {
   Film
 } from 'lucide-react';
 import { formatDate } from '../../utils/dateTimestampHelper';
-import { getMediaBlobUrl } from '../../utils/mediaStorage';
+import { getMediaBlobUrl, resolveMediaUrl } from '../../utils/mediaStorage';
 
 const ROOM_ANGLE_FALLBACKS = [
   'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=1200',
@@ -61,17 +61,18 @@ export default function TimestampGallery({ media = [], videoUrl = null, property
     return () => { activeEffect = false; };
   }, [property?.id, property?.property_code]);
 
-  // Normalize media items with owner's uploaded photos (retaining dataUrls and blobUrls)
+  // Normalize media items with owner's uploaded photos (retaining dataUrls, blobUrls and resolving relative paths)
   const items = (Array.isArray(media) && media.length > 0)
     ? media.map((m, idx) => {
-        let u = m.media_url || m.url || m.preview || m.dataUrl || '';
+        let rawU = m.media_url || m.url || m.preview || m.dataUrl || '';
+        let u = resolveMediaUrl(rawU);
         if (!u || u.includes('hero-slide-1.jpg')) {
           u = ROOM_ANGLE_FALLBACKS[idx % 3];
         }
         return {
           ...m,
           media_url: u,
-          preview: m.preview || m.dataUrl || u,
+          preview: resolveMediaUrl(m.preview || m.dataUrl || u),
           room_tag: m.room_tag || m.label || `Angle ${idx + 1}`,
           chapterTitle: m.room_tag || m.label || (idx === 0 ? 'Front Entrance' : idx === 1 ? 'Living / Bedroom' : 'Balcony / Kitchen'),
         };
@@ -149,7 +150,7 @@ export default function TimestampGallery({ media = [], videoUrl = null, property
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  const safeVideoUrl = localVideoUrl || (videoUrl ? videoUrl : DEFAULT_SAMPLE_VIDEO);
+  const safeVideoUrl = resolveMediaUrl(localVideoUrl || (videoUrl ? videoUrl : DEFAULT_SAMPLE_VIDEO));
   const hasPlayableVideo = Boolean(localVideoUrl || videoUrl);
 
   return (

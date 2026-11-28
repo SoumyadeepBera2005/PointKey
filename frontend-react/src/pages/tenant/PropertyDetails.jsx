@@ -35,6 +35,7 @@ import { formatINR } from '../../utils/currencyFormatter';
 import { SAMPLE_PROPERTIES } from '../../data/sampleProperties';
 import { useAuth } from '../../context/AuthContext';
 import { subscribeRealtime } from '../../services/realtimeSync';
+import { resolveMediaUrl } from '../../utils/mediaStorage';
 
 export default function PropertyDetails() {
   const { id } = useParams();
@@ -98,11 +99,13 @@ export default function PropertyDetails() {
               id: `angle-${idx + 1}`,
               room_tag: ph.label || `Angle ${idx + 1}`,
               media_type: 'IMAGE',
-              media_url: ph.url || ph.preview || (typeof ph === 'string' ? ph : ''),
+              media_url: resolveMediaUrl(ph.url || ph.preview || (typeof ph === 'string' ? ph : '')),
               category: 'ROOM',
               captured_date: prop.created_at || new Date().toISOString(),
             })).filter((m) => Boolean(m.media_url));
           }
+          prop.cover_url = resolveMediaUrl(prop.cover_url);
+          prop.video_url = resolveMediaUrl(prop.video_url);
         }
         setProperty(prop);
         setUnlocked(Boolean(data.unlocked || isLocallyUnlocked));
@@ -127,18 +130,20 @@ export default function PropertyDetails() {
               id: `angle-${idx + 1}`,
               room_tag: ph.label || `Angle ${idx + 1}`,
               media_type: 'IMAGE',
-              media_url: ph.url || ph.preview || (typeof ph === 'string' ? ph : ''),
+              media_url: resolveMediaUrl(ph.url || ph.preview || (typeof ph === 'string' ? ph : '')),
               category: 'ROOM',
               captured_date: matched.created_at || new Date().toISOString(),
             })).filter((m) => Boolean(m.media_url));
 
             setProperty({
               ...matched,
+              cover_url: resolveMediaUrl(matched.cover_url),
+              video_url: resolveMediaUrl(matched.video_url),
               rent_amount: matched.rent_amount || matched.price,
               advance_amount: matched.advance_amount || matched.deposit,
               locality: matched.locality || 'Area',
               city: matched.city || 'Kolkata',
-              media: mediaList.length > 0 ? mediaList : (matched.cover_url ? [{ id: 'cov-1', room_tag: 'Main View', media_url: matched.cover_url, media_type: 'IMAGE' }] : []),
+              media: mediaList.length > 0 ? mediaList : (matched.cover_url ? [{ id: 'cov-1', room_tag: 'Main View', media_url: resolveMediaUrl(matched.cover_url), media_type: 'IMAGE' }] : []),
             });
             setUnlocked(isLocallyUnlocked);
             return;

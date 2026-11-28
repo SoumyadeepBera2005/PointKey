@@ -92,7 +92,24 @@ async function searchProperties(req, res, next) {
 
     const sqlParams = [...selectParams, ...params, ...spatialParams];
     const [rows] = await db.query(sql, sqlParams);
-    const payload = { results: rows, count: rows.length };
+    
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+    const host = req.get('host') || 'localhost:5000';
+    const toAbs = (u) => {
+      if (!u || typeof u !== 'string') return u;
+      if (u.startsWith('/uploads/') || u.startsWith('uploads/')) {
+        const clean = u.startsWith('/') ? u : `/${u}`;
+        return `${protocol}://${host}${clean}`;
+      }
+      return u;
+    };
+
+    const parsedRows = rows.map((r) => ({
+      ...r,
+      cover_url: toAbs(r.cover_url),
+    }));
+
+    const payload = { results: parsedRows, count: parsedRows.length };
     await cacheSet(cacheKey, JSON.stringify(payload), 60);
     res.json(payload);
   } catch (e) { next(e); }

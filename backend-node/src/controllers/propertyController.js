@@ -21,6 +21,17 @@ function parseJson(v) {
   try { return JSON.parse(v); } catch { return v; }
 }
 
+function toAbsoluteMediaUrl(req, u) {
+  if (!u || typeof u !== 'string') return u;
+  if (u.startsWith('/uploads/') || u.startsWith('uploads/')) {
+    const clean = u.startsWith('/') ? u : `/${u}`;
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+    const host = req.get('host') || 'localhost:5000';
+    return `${protocol}://${host}${clean}`;
+  }
+  return u;
+}
+
 // GET /api/v1/properties/:id  (optionalAuth + applyPropertyPrivacy applied in route)
 async function getProperty(req, res, next) {
   try {
@@ -44,8 +55,15 @@ async function getProperty(req, res, next) {
       [req.params.id]
     );
     property.photos = parseJson(raw.photos) || [];
+    property.cover_url = toAbsoluteMediaUrl(req, property.cover_url);
+    property.video_url = toAbsoluteMediaUrl(req, property.video_url);
+    property.electricity_bill_url = toAbsoluteMediaUrl(req, property.electricity_bill_url);
+
     if (media && media.length > 0) {
-      property.media = media;
+      property.media = media.map((m) => ({
+        ...m,
+        media_url: toAbsoluteMediaUrl(req, m.media_url),
+      }));
     } else {
       const photosList = property.photos;
       if (Array.isArray(photosList) && photosList.length > 0) {
@@ -53,7 +71,7 @@ async function getProperty(req, res, next) {
           id: `angle-${idx + 1}`,
           room_tag: ph.label || `Angle ${idx + 1}`,
           media_type: 'IMAGE',
-          media_url: ph.url || ph.preview || (typeof ph === 'string' ? ph : ''),
+          media_url: toAbsoluteMediaUrl(req, ph.url || ph.preview || (typeof ph === 'string' ? ph : '')),
           captured_date: raw.created_at || new Date().toISOString(),
         })).filter((m) => Boolean(m.media_url));
       } else if (raw.cover_url) {
@@ -61,7 +79,7 @@ async function getProperty(req, res, next) {
           id: 'cover-1',
           room_tag: 'Main View',
           media_type: 'IMAGE',
-          media_url: raw.cover_url,
+          media_url: toAbsoluteMediaUrl(req, raw.cover_url),
           captured_date: raw.created_at || new Date().toISOString(),
         }];
       } else {
@@ -86,13 +104,32 @@ async function myListings(req, res, next) {
        FROM properties p WHERE p.owner_id = ? ORDER BY p.created_at DESC`,
       [req.user.id]
     );
-    const parsedRows = rows.map((r) => ({
-      ...r,
-      video_size_mb: '20',
-      electricity_bill_uploaded: Boolean(r.electricity_bill_name || r.electricity_bill_url),
-      location: [r.locality, r.city].filter(Boolean).join(', ') || 'Kolkata',
-      photos: parseJson(r.photos),
-    }));
+    const parsedRows = rows.map((r) => {
+      let photos = parseJson(r.photos);
+      if (Array.isArray(photos)) {
+        photos = photos.map((ph) => {
+          if (typeof ph === 'string') return toAbsoluteMediaUrl(req, ph);
+          if (ph && typeof ph === 'object') {
+            return {
+              ...ph,
+              url: toAbsoluteMediaUrl(req, ph.url || ph.preview),
+              preview: toAbsoluteMediaUrl(req, ph.preview || ph.url),
+            };
+          }
+          return ph;
+        });
+      }
+      return {
+        ...r,
+        cover_url: toAbsoluteMediaUrl(req, r.cover_url),
+        video_url: toAbsoluteMediaUrl(req, r.video_url),
+        electricity_bill_url: toAbsoluteMediaUrl(req, r.electricity_bill_url),
+        video_size_mb: '20',
+        electricity_bill_uploaded: Boolean(r.electricity_bill_name || r.electricity_bill_url),
+        location: [r.locality, r.city].filter(Boolean).join(', ') || 'Kolkata',
+        photos,
+      };
+    });
     res.json({ listings: parsedRows });
   } catch (e) { next(e); }
 }

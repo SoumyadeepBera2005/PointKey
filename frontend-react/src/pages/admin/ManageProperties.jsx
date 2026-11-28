@@ -1,18 +1,18 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { 
-  Building2, 
-  MapPin, 
-  Phone, 
-  Search, 
-  Edit3, 
-  Trash2, 
-  Eye, 
-  CheckCircle2, 
-  Clock, 
-  AlertCircle, 
-  Check, 
-  X, 
+import {
+  Building2,
+  MapPin,
+  Phone,
+  Search,
+  Edit3,
+  Trash2,
+  Eye,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  Check,
+  X,
   ExternalLink,
   Camera,
   Video,
@@ -30,6 +30,7 @@ import AdminEditPropertyModal from '../../components/admin/AdminEditPropertyModa
 import api from '../../services/api';
 import { formatINR } from '../../utils/currencyFormatter';
 import { publishRealtime, subscribeRealtime } from '../../services/realtimeSync';
+import { resolveMediaUrl } from '../../utils/mediaStorage';
 
 const DEFAULT_ROOM_ANGLES = [
   'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80',
@@ -49,7 +50,8 @@ const sanitizePropMedia = (p) => {
   const cleanPhotos = [0, 1, 2].map((idx) => {
     const existing = photos[idx];
     const defaultLabel = idx === 0 ? 'Angle 1 (Front/Entrance)' : idx === 1 ? 'Angle 2 (Living/Bedroom)' : 'Angle 3 (Balcony/Kitchen/Side)';
-    let u = existing?.url || existing?.preview || existing?.dataUrl || (idx === 0 ? p.cover_url : '');
+    let rawU = existing?.url || existing?.preview || existing?.dataUrl || (idx === 0 ? p.cover_url : '');
+    let u = resolveMediaUrl(rawU);
     if (!u || u.includes('hero-slide-1.jpg')) {
       u = DEFAULT_ROOM_ANGLES[idx];
     }
@@ -57,16 +59,16 @@ const sanitizePropMedia = (p) => {
       label: existing?.label || defaultLabel,
       name: existing?.name || `photo_angle_${idx + 1}.jpg`,
       url: u,
-      preview: existing?.preview || existing?.dataUrl || u,
+      preview: resolveMediaUrl(existing?.preview || existing?.dataUrl || u),
     };
   });
 
-  let billUrl = p.electricity_bill_url || p.electricity_bill_preview;
+  let billUrl = resolveMediaUrl(p.electricity_bill_url || p.electricity_bill_preview);
   if (!billUrl) {
     billUrl = DEFAULT_BILL_FILE;
   }
 
-  let videoUrl = p.video_url || p.video_preview;
+  let videoUrl = resolveMediaUrl(p.video_url || p.video_preview);
   if (!videoUrl) {
     videoUrl = DEFAULT_WALKTHROUGH_VIDEO;
   }
@@ -87,7 +89,7 @@ export default function ManageProperties() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('ALL'); // ALL, UNBOOKED, BOOKED, VERIFIED, PENDING
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   // Selected modals
   const [inspectProperty, setInspectProperty] = useState(null);
   const [editProperty, setEditProperty] = useState(null);
@@ -209,7 +211,7 @@ export default function ManageProperties() {
             );
             localStorage.setItem(key, JSON.stringify(updated));
           }
-        } catch {}
+        } catch { }
       };
       updateStorage('prent_user_posted_properties');
       updateStorage('prent_pending_admin_properties');
@@ -230,7 +232,7 @@ export default function ManageProperties() {
             created_at: new Date().toISOString(),
           });
           localStorage.setItem(notifKey, JSON.stringify(existingNotifs));
-        } catch {}
+        } catch { }
       }
 
       publishRealtime('PROPERTY_BOOKING', { id: property.id, status: newStatus });
@@ -322,7 +324,7 @@ export default function ManageProperties() {
             const filtered = list.filter((item) => item.id !== id);
             localStorage.setItem(key, JSON.stringify(filtered));
           }
-        } catch {}
+        } catch { }
       };
       removeFromStorage('prent_user_posted_properties');
       removeFromStorage('prent_pending_admin_properties');
@@ -404,22 +406,20 @@ export default function ManageProperties() {
               <button
                 type="button"
                 onClick={() => setActiveTab('ALL')}
-                className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${
-                  activeTab === 'ALL'
+                className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${activeTab === 'ALL'
                     ? 'bg-[#1f4d3f] text-white shadow-xs'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
+                  }`}
               >
                 All Properties ({properties.length})
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab('UNBOOKED')}
-                className={`px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1 ${
-                  activeTab === 'UNBOOKED'
+                className={`px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1 ${activeTab === 'UNBOOKED'
                     ? 'bg-emerald-700 text-white shadow-xs'
                     : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
-                }`}
+                  }`}
               >
                 <span>🟢 Unbooked</span>
                 <span className="opacity-80">({unbookedCount})</span>
@@ -427,11 +427,10 @@ export default function ManageProperties() {
               <button
                 type="button"
                 onClick={() => setActiveTab('BOOKED')}
-                className={`px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1 ${
-                  activeTab === 'BOOKED'
+                className={`px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1 ${activeTab === 'BOOKED'
                     ? 'bg-rose-700 text-white shadow-xs'
                     : 'bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-200'
-                }`}
+                  }`}
               >
                 <span>🔴 Booked</span>
                 <span className="opacity-80">({bookedCount})</span>
@@ -439,11 +438,10 @@ export default function ManageProperties() {
               <button
                 type="button"
                 onClick={() => setActiveTab('VERIFIED')}
-                className={`px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1 ${
-                  activeTab === 'VERIFIED'
+                className={`px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1 ${activeTab === 'VERIFIED'
                     ? 'bg-sky-700 text-white shadow-xs'
                     : 'bg-sky-50 text-sky-800 hover:bg-sky-100 border border-sky-200'
-                }`}
+                  }`}
               >
                 <span>✅ Verified</span>
                 <span className="opacity-80">({verifiedCount})</span>
@@ -451,11 +449,10 @@ export default function ManageProperties() {
               <button
                 type="button"
                 onClick={() => setActiveTab('PENDING')}
-                className={`px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1 ${
-                  activeTab === 'PENDING'
+                className={`px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1 ${activeTab === 'PENDING'
                     ? 'bg-amber-600 text-white shadow-xs'
                     : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
-                }`}
+                  }`}
               >
                 <span>⏳ Pending Review</span>
                 <span className="opacity-80">({pendingCount})</span>
@@ -499,7 +496,7 @@ export default function ManageProperties() {
               let propPhotos = [];
               try {
                 propPhotos = typeof prop.photos === 'string' ? JSON.parse(prop.photos) : (Array.isArray(prop.photos) ? prop.photos : []);
-              } catch {}
+              } catch { }
               if (propPhotos.length === 0 && prop.cover_url) {
                 propPhotos = [{ label: 'Cover', url: prop.cover_url }];
               }
@@ -524,11 +521,10 @@ export default function ManageProperties() {
                       <div className="flex items-center gap-1.5">
                         {/* Booking Status Badge */}
                         <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-black border ${
-                            isBooked
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-black border ${isBooked
                               ? 'bg-rose-50 text-rose-800 border-rose-300'
                               : 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                          }`}
+                            }`}
                         >
                           {isBooked ? '🔴 BOOKED' : '🟢 UNBOOKED'}
                         </span>
@@ -602,11 +598,11 @@ export default function ManageProperties() {
                               src={ph.url || DEFAULT_ROOM_ANGLES[idx % 3]}
                               alt="Site Angle"
                               className="w-8 h-8 rounded-lg object-cover border border-slate-200"
-                              onError={(e) => { 
+                              onError={(e) => {
                                 if (ph.preview && e.currentTarget.src !== ph.preview) {
                                   e.currentTarget.src = ph.preview;
                                 } else {
-                                  e.currentTarget.src = DEFAULT_ROOM_ANGLES[idx % 3]; 
+                                  e.currentTarget.src = DEFAULT_ROOM_ANGLES[idx % 3];
                                 }
                               }}
                             />
@@ -632,11 +628,10 @@ export default function ManageProperties() {
                     <button
                       type="button"
                       onClick={() => handleToggleBooking(prop)}
-                      className={`px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer text-xs ${
-                        isBooked
+                      className={`px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer text-xs ${isBooked
                           ? 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300'
                           : 'bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-300'
-                      }`}
+                        }`}
                       title={isBooked ? 'Mark property as unbooked / available' : 'Mark property as booked'}
                     >
                       {isBooked ? <ToggleLeft size={14} className="text-emerald-700" /> : <ToggleRight size={14} className="text-rose-700" />}

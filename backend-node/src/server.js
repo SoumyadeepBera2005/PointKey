@@ -31,9 +31,12 @@ app.get('/api/v1/health', (_req, res) => res.json({ status: 'ok', service: 'pren
 // Universal media & verification document upload
 app.post('/api/v1/upload', uploadMiddleware.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
-  const url = `/uploads/${req.file.filename}`;
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+  const host = req.get('host') || 'localhost:5000';
+  const fullUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
   res.status(201).json({
-    url,
+    url: fullUrl,
+    relativeUrl: `/uploads/${req.file.filename}`,
     filename: req.file.filename,
     originalName: req.file.originalname,
     size: req.file.size,

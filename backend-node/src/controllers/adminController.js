@@ -615,14 +615,41 @@ async function listAllProperties(req, res, next) {
       params
     );
 
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+    const host = req.get('host') || 'localhost:5000';
+    const toAbs = (u) => {
+      if (!u || typeof u !== 'string') return u;
+      if (u.startsWith('/uploads/') || u.startsWith('uploads/')) {
+        const clean = u.startsWith('/') ? u : `/${u}`;
+        return `${protocol}://${host}${clean}`;
+      }
+      return u;
+    };
+
     const parsed = rows.map((r) => {
       let photos = [];
       try {
         photos = typeof r.photos === 'string' ? JSON.parse(r.photos) : (Array.isArray(r.photos) ? r.photos : []);
       } catch { photos = []; }
+
+      photos = photos.map((ph) => {
+        if (typeof ph === 'string') return toAbs(ph);
+        if (ph && typeof ph === 'object') {
+          return {
+            ...ph,
+            url: toAbs(ph.url || ph.preview),
+            preview: toAbs(ph.preview || ph.url),
+          };
+        }
+        return ph;
+      });
+
       return {
         ...r,
         photos,
+        cover_url: toAbs(r.cover_url),
+        video_url: toAbs(r.video_url),
+        electricity_bill_url: toAbs(r.electricity_bill_url),
         location: [r.locality, r.city].filter(Boolean).join(', ') || 'Kolkata',
       };
     });

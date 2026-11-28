@@ -22,7 +22,7 @@ import {
   Download
 } from 'lucide-react';
 import { formatINR } from '../../utils/currencyFormatter';
-import { getMediaBlobUrl } from '../../utils/mediaStorage';
+import { getMediaBlobUrl, resolveMediaUrl } from '../../utils/mediaStorage';
 
 const DEFAULT_ANGLES = [
   'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=1200&q=80',
@@ -32,6 +32,98 @@ const DEFAULT_ANGLES = [
 
 const SAMPLE_BILL_PREVIEW = '/assets/images/electric-bill-sample.png';
 
+/**
+ * Safe Image Component that handles fallback without resetting DOM src during re-renders,
+ * completely preventing white/empty blinking flashes.
+ */
+function SafeImage({ src, fallback, alt, className }) {
+  const [imgSrc, setImgSrc] = useState(src);
+
+  useEffect(() => {
+    setImgSrc(src);
+  }, [src]);
+
+  return (
+    <img
+      src={imgSrc}
+      alt={alt}
+      className={className}
+      onError={() => {
+        if (fallback && imgSrc !== fallback) {
+          setImgSrc(fallback);
+        }
+      }}
+    />
+  );
+}
+
+/**
+ * Isolated Automated Tour Player component so slideshow intervals do not re-render the parent modal
+ */
+function AutomatedTourPlayer({ photos, defaultAngles }) {
+  const [tourIdx, setTourIdx] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(true);
+
+  useEffect(() => {
+    let timer = null;
+    if (isPlaying && photos.length > 0) {
+      timer = setInterval(() => {
+        setTourIdx((prev) => (prev + 1) % photos.length);
+      }, 3500);
+    }
+    return () => { if (timer) clearInterval(timer); };
+  }, [isPlaying, photos.length]);
+
+  const activePhoto = photos[tourIdx] || photos[0] || {};
+  const currentUrl = activePhoto.url || defaultAngles[tourIdx % 3];
+  const fallbackUrl = activePhoto.preview || defaultAngles[tourIdx % 3];
+
+  return (
+    <div className="rounded-xl overflow-hidden border border-sky-300 mt-2 bg-slate-900 relative h-48 flex items-center justify-center group">
+      <SafeImage
+        key={tourIdx}
+        src={currentUrl}
+        fallback={fallbackUrl}
+        alt={activePhoto.label || 'Room Angle'}
+        className="w-full h-full object-cover transition-all duration-700 ease-in-out"
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 pointer-events-none" />
+      
+      {/* Tour Badge */}
+      <div className="absolute top-2 left-2 flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-sm text-amber-300 text-[10px] font-black border border-amber-400/40">
+        <Sparkles size={11} className="text-amber-400 animate-spin" />
+        <span>Automated Tour · 3 Angles</span>
+      </div>
+
+      {/* Controls & Active Step Overlay */}
+      <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
+        <div className="bg-black/75 px-2.5 py-1 rounded-md text-white text-[10px] font-bold border border-white/20">
+          {activePhoto.label || `Angle ${tourIdx + 1}`}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button 
+            type="button" 
+            onClick={() => setIsPlaying(!isPlaying)}
+            className="w-6 h-6 rounded-full bg-white/90 text-slate-800 flex items-center justify-center cursor-pointer shadow hover:bg-white transition"
+          >
+            {isPlaying ? <Pause size={11} /> : <Play size={11} />}
+          </button>
+          <div className="flex items-center gap-1 bg-black/70 px-2 py-1 rounded-full border border-white/20">
+            {photos.map((_, idx) => (
+              <button
+                type="button" 
+                key={idx} 
+                onClick={() => { setTourIdx(idx); setIsPlaying(false); }} 
+                className={`w-2 h-2 rounded-full transition cursor-pointer ${tourIdx === idx ? 'bg-amber-400 scale-125' : 'bg-white/40'}`} 
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PropertyVerificationModal({ property, isOpen, onClose, onUpdateStatus }) {
   const [selectedPreview, setSelectedPreview] = useState(null); // { url, title, type: 'IMAGE'|'BILL' }
   const [rejectionReason, setRejectionReason] = useState('');
@@ -40,8 +132,6 @@ export default function PropertyVerificationModal({ property, isOpen, onClose, o
   const [videoPlayError, setVideoPlayError] = useState(false);
   const [localVideoUrl, setLocalVideoUrl] = useState(null);
   const [localBillUrl, setLocalBillUrl] = useState(null);
-  const [tourAngleIdx, setTourAngleIdx] = useState(0);
-  const [isTourPlaying, setIsTourPlaying] = useState(true);
   const [viewMode, setViewMode] = useState('REAL_VIDEO'); // 'REAL_VIDEO' | 'AUTOMATED_TOUR'
 
   // Retrieve persistent large media from IndexedDB if stored client-side
@@ -74,17 +164,6 @@ export default function PropertyVerificationModal({ property, isOpen, onClose, o
     return () => { active = false; };
   }, [property?.id, property?.property_code]);
 
-  // Automated 3-angle walkthrough tour timer
-  useEffect(() => {
-    let interval = null;
-    if (isTourPlaying) {
-      interval = setInterval(() => {
-        setTourAngleIdx((prev) => (prev + 1) % 3);
-      }, 3000);
-    }
-    return () => { if (interval) clearInterval(interval); };
-  }, [isTourPlaying]);
-
   if (!isOpen || !property) return null;
 
   // Extract photos safely
@@ -96,30 +175,34 @@ export default function PropertyVerificationModal({ property, isOpen, onClose, o
     rawPhotos = [{ label: 'Front Entrance (Angle 1)', url: property.cover_url }];
   }
 
-  // Ensure 3 angles exist without stripping user uploaded photos
+  // Ensure 3 angles exist and resolve relative URLs to backend host
   const safePhotos = [0, 1, 2].map((idx) => {
     const p = rawPhotos[idx];
     const defaultLabel = idx === 0 ? 'Angle 1 (Front/Entrance)' : idx === 1 ? 'Angle 2 (Living/Bedroom)' : 'Angle 3 (Balcony/Kitchen/Side)';
-    let url = p?.url || p?.preview || p?.dataUrl || (idx === 0 ? property.cover_url : '');
+    let rawUrl = p?.url || p?.preview || p?.dataUrl || (idx === 0 ? property.cover_url : '');
+    let url = resolveMediaUrl(rawUrl);
     if (!url || url.includes('hero-slide-1.jpg')) {
       url = DEFAULT_ANGLES[idx];
     }
+    const preview = resolveMediaUrl(p?.preview || p?.dataUrl || url);
     return {
       url,
-      preview: p?.preview || p?.dataUrl || url,
+      preview: preview || DEFAULT_ANGLES[idx],
       label: p?.label || defaultLabel,
       name: p?.name || `photo_angle_${idx + 1}.jpg`
     };
   });
 
-  // Safe electricity bill URL (prioritizes local indexedDB, then property dataUrl/remote url)
-  let billUrl = localBillUrl || property.electricity_bill_url || property.electricity_bill_preview;
+  // Safe electricity bill URL (resolves relative paths to Render backend host)
+  let rawBillUrl = localBillUrl || property.electricity_bill_url || property.electricity_bill_preview;
+  let billUrl = resolveMediaUrl(rawBillUrl);
   if (!billUrl || billUrl.includes('undefined')) {
     billUrl = SAMPLE_BILL_PREVIEW;
   }
 
-  // Safe video URL
-  let videoSrc = localVideoUrl || property.video_url || property.video_preview || '';
+  // Safe video URL (resolves relative paths to Render backend host)
+  let rawVideoSrc = localVideoUrl || property.video_url || property.video_preview || '';
+  let videoSrc = resolveMediaUrl(rawVideoSrc);
   const hasRealPlayableVideo = Boolean(videoSrc) && !videoPlayError;
 
 
@@ -247,17 +330,11 @@ export default function PropertyVerificationModal({ property, isOpen, onClose, o
                   className="rounded-xl overflow-hidden border border-slate-200 bg-slate-50 group relative cursor-pointer hover:border-slate-400 transition"
                   onClick={() => setSelectedPreview({ url: ph.url, title: ph.label, type: 'IMAGE' })}
                 >
-                  <img 
+                  <SafeImage 
                     src={ph.url} 
+                    fallback={ph.preview}
                     alt={ph.label} 
                     className="w-full h-36 object-cover group-hover:scale-105 transition duration-200"
-                    onError={(e) => { 
-                      if (ph.preview && e.currentTarget.src !== ph.preview) {
-                        e.currentTarget.src = ph.preview;
-                      } else {
-                        e.currentTarget.src = DEFAULT_ANGLES[idx % 3]; 
-                      }
-                    }}
                   />
                   <div className="p-2 bg-white border-t border-slate-100 flex items-center justify-between">
                     <span className="text-[10px] font-black text-slate-700 truncate">{ph.label}</span>
@@ -316,47 +393,7 @@ export default function PropertyVerificationModal({ property, isOpen, onClose, o
                     />
                   </div>
                 ) : (
-                  <div className="rounded-xl overflow-hidden border border-sky-300 mt-2 bg-slate-900 relative h-48 flex items-center justify-center group">
-                    <img 
-                      src={safePhotos[tourAngleIdx].url} 
-                      alt={safePhotos[tourAngleIdx].label} 
-                      className="w-full h-full object-cover transition-all duration-700 ease-in-out"
-                      onError={(e) => { e.currentTarget.src = DEFAULT_ANGLES[tourAngleIdx % 3]; }}
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 pointer-events-none" />
-                    
-                    {/* Tour Badge */}
-                    <div className="absolute top-2 left-2 flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-sm text-amber-300 text-[10px] font-black border border-amber-400/40">
-                      <Sparkles size={11} className="text-amber-400 animate-spin" />
-                      <span>Automated Tour · 3 Angles</span>
-                    </div>
-
-                    {/* Controls & Active Step Overlay */}
-                    <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
-                      <div className="bg-black/75 px-2.5 py-1 rounded-md text-white text-[10px] font-bold border border-white/20">
-                        {safePhotos[tourAngleIdx].label}
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <button 
-                          type="button" 
-                          onClick={() => setIsTourPlaying(!isTourPlaying)}
-                          className="w-6 h-6 rounded-full bg-white/90 text-slate-800 flex items-center justify-center cursor-pointer shadow hover:bg-white transition"
-                        >
-                          {isTourPlaying ? <Pause size={11} /> : <Play size={11} />}
-                        </button>
-                        <div className="flex items-center gap-1 bg-black/70 px-2 py-1 rounded-full border border-white/20">
-                          {[0, 1, 2].map((idx) => (
-                            <button
-                              type="button" 
-                              key={idx} 
-                              onClick={() => { setTourAngleIdx(idx); setIsTourPlaying(false); }} 
-                              className={`w-2 h-2 rounded-full transition cursor-pointer ${tourAngleIdx === idx ? 'bg-amber-400 scale-125' : 'bg-white/40'}`} 
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  <AutomatedTourPlayer photos={safePhotos} defaultAngles={DEFAULT_ANGLES} />
                 )}
               </div>
 
@@ -387,11 +424,11 @@ export default function PropertyVerificationModal({ property, isOpen, onClose, o
                   className="rounded-xl overflow-hidden border border-amber-300 mt-2 bg-white cursor-pointer relative group"
                   onClick={() => setSelectedPreview({ url: billUrl, title: `Electric Bill: ${property.electricity_bill_name || 'Utility Bill'}`, type: 'BILL' })}
                 >
-                  <img 
+                  <SafeImage 
                     src={billUrl} 
+                    fallback={SAMPLE_BILL_PREVIEW}
                     alt="Electricity Bill" 
                     className="w-full h-32 object-cover bg-slate-50 group-hover:scale-102 transition"
-                    onError={(e) => { e.currentTarget.src = SAMPLE_BILL_PREVIEW; }}
                   />
                   <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-1.5 text-white text-xs font-bold">
                     <Maximize2 size={16} />
@@ -570,11 +607,11 @@ export default function PropertyVerificationModal({ property, isOpen, onClose, o
               </div>
 
               <div className="mt-3 rounded-2xl overflow-hidden bg-slate-100 max-h-[70vh] flex items-center justify-center">
-                <img 
+                <SafeImage 
                   src={selectedPreview.url} 
+                  fallback={selectedPreview.type === 'BILL' ? SAMPLE_BILL_PREVIEW : DEFAULT_ANGLES[0]}
                   alt={selectedPreview.title} 
                   className="w-full max-h-[68vh] object-contain rounded-xl" 
-                  onError={(e) => { e.currentTarget.src = selectedPreview.type === 'BILL' ? SAMPLE_BILL_PREVIEW : DEFAULT_ANGLES[0]; }}
                 />
               </div>
 
